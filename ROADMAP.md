@@ -9,8 +9,8 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 |---|---|---|
 | 1 | Scaffolding + data prep | ✅ |
 | 2 | Public dataset ingestion | ✅ (Halmstad) |
-| 3 | Baseline training | 🚧 baseline run in progress |
-| 4 | Evaluation | 🚧 script done, final baseline eval pending |
+| 3 | Baseline training | ✅ |
+| 4 | Evaluation | ✅ |
 | 5 | Video inference + tracking | ⏳ |
 | 6 | Error analysis + iteration | ⏳ |
 
@@ -66,7 +66,7 @@ Rules:
   by video; document the strategy per dataset.
 - No new classes without asking the user.
 
-## Phase 3: Baseline training 🚧
+## Phase 3: Baseline training ✅
 
 Delivered:
 - `scripts/train.py`: wrapper around the Ultralytics trainer; `configs/train.yaml` +
@@ -79,10 +79,15 @@ Environment: `.venv` in the repo (excluded from Nextcloud), torch 2.14.1+cu126,
 ultralytics 8.4.175, RTX 4070 SUPER. Autobatch picks batch 4–5 at `imgsz=1280`.
 `data/` and `runs/` are in the Nextcloud exclude list.
 
-Baseline run: `python scripts/train.py --name baseline` (yolo11s, imgsz 1280, 100 epochs).
-Results: see `runs/detect/baseline/` and the table below once finished.
+Baseline run: `python scripts/train.py --name baseline` (yolo11s, imgsz 1280, 100 epochs,
+6.1 h, 12:41–18:50 on 2026-10-11).
+- validation mAP50 peaked at epoch 29 (0.894, mAP50-95 0.428) and fell to 0.816 by epoch 100.
+  Validation box loss rose from about epoch 20 on, while training loss kept falling: overfitting on
+  a small, homogeneous domain. `best.pt` is epoch 29.
+- consequence for later runs: about 30–40 epochs are enough on Halmstad alone. More varied data
+  matters more than more epochs.
 
-## Phase 4: Evaluation 🚧
+## Phase 4: Evaluation ✅
 
 Delivered:
 - `scripts/evaluate.py`: one Ultralytics `val` pass (standard mAP) plus one predict pass that
@@ -94,8 +99,15 @@ Delivered:
 - provenance checks: split leakage, dataset fingerprint vs. the training run, unfinished training
 - verified: COCO and Ultralytics mAP agree (0.771 vs 0.767 mAP50 on a dev subset)
 
-Pending: final evaluation of `runs/detect/baseline/weights/best.pt` on `test` once training
-finishes; results table below and in the README.
+Baseline on `test` (1,615 frames; full table in the README):
+- mAP@0.5 0.777, mAP@0.5:0.95 0.347; multirotor AP50 0.802, bird AP50 0.751
+- 74 % of the boxes are small (< 32² px)
+- multirotor ↔ bird: 3 birds detected as multirotor, 0 multirotors detected as bird
+- 709 of 723 multirotor false positives at conf 0.25 in drone clips are second or offset boxes on an
+  already-found drone. With NMS IoU 0.5, precision goes from 0.52 to 0.74 (recall 0.87 → 0.84).
+
+Fixed: Ultralytics loads a list source into memory as one batch and ignores `batch`. On the full
+test set that was 23.7 GiB, which ran out of memory. `evaluate.py` now predicts in chunks.
 
 ## Phase 5: Video inference + tracking ⏳
 
@@ -138,6 +150,9 @@ finishes; results table below and in the README.
   and predict stalled.
 - 2026-10-11: Ultralytics settings are project-local (`YOLO_CONFIG_DIR=runs/.ultralytics`). The
   global ones pointed to another project's weights/runs folders.
+- 2026-10-11: benchmark mAP keeps Ultralytics' default NMS IoU 0.7, so it stays comparable.
+  Phase 5 video inference should default to NMS IoU 0.5, which removes most duplicate boxes on
+  small drones.
 
 ## Open questions
 

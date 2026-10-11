@@ -171,3 +171,41 @@ def test_report_mentions_bird_confusion_and_skips_absent_classes() -> None:
     assert "1 birds detected as multirotor" in report
     assert "vtol" not in report
     assert "(same as training)" in report
+
+
+def test_predict_feeds_ultralytics_in_chunks(tmp_path: Path) -> None:
+    """A list source is one in-memory batch in Ultralytics, so evaluate.py must chunk it."""
+    import argparse
+    import importlib.util
+    from types import SimpleNamespace
+
+    import torch
+
+    from fpvdd.paths import REPO_ROOT
+
+    spec = importlib.util.spec_from_file_location(
+        "evaluate_script", REPO_ROOT / "scripts/evaluate.py"
+    )
+    evaluate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluate)
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.calls: list[int] = []
+
+        def predict(self, source: list[str], **kwargs: object) -> list[SimpleNamespace]:
+            self.calls.append(len(source))
+            boxes = SimpleNamespace(
+                cls=torch.tensor([0.0]),
+                conf=torch.tensor([0.9]),
+                xyxy=torch.tensor([[1.0, 2, 3, 4]]),
+            )
+            return [SimpleNamespace(path=s, boxes=boxes) for s in source]
+
+    images = [tmp_path / f"v_f{i:06d}.jpg" for i in range(19)]
+    args = argparse.Namespace(conf=0.001, iou=0.7, batch=8, device=None)
+    model = FakeModel()
+    preds = evaluate.predict(model, images, args, 1280)
+    assert model.calls == [8, 8, 3]
+    assert set(preds) == set(images)
+    assert preds[images[0]].tolist() == [[0.0, pytest.approx(0.9), 1.0, 2.0, 3.0, 4.0]]

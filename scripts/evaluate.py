@@ -88,23 +88,32 @@ def ultralytics_summary(metrics: Any, names: list[str]) -> dict[str, Any]:
 
 
 def predict(model: Any, images: list[Path], args: argparse.Namespace, imgsz: int):
-    """Predictions per image as ``(M, 6)`` arrays ``[class, conf, x1, y1, x2, y2]``."""
+    """Predictions per image as ``(M, 6)`` arrays ``[class, conf, x1, y1, x2, y2]``.
+
+    Ultralytics loads a list source into memory as a single batch and ignores ``batch``, so the
+    list is fed in chunks of ``args.batch`` images.
+    """
     preds: dict[Path, np.ndarray] = {}
-    stream = model.predict(
-        source=[str(p) for p in images],
-        stream=True,
-        conf=args.conf,
-        iou=args.iou,
-        imgsz=imgsz,
-        batch=args.batch,
-        max_det=300,
-        device=args.device,
-        verbose=False,
-    )
-    for result in tqdm(stream, total=len(images), desc="predict", unit="img"):
-        b = result.boxes
-        arr = np.column_stack([b.cls.cpu().numpy(), b.conf.cpu().numpy(), b.xyxy.cpu().numpy()])
-        preds[Path(result.path)] = arr.reshape(-1, 6)
+    with tqdm(total=len(images), desc="predict", unit="img") as bar:
+        for start in range(0, len(images), args.batch):
+            chunk = images[start : start + args.batch]
+            results = model.predict(
+                source=[str(p) for p in chunk],
+                conf=args.conf,
+                iou=args.iou,
+                imgsz=imgsz,
+                batch=len(chunk),
+                max_det=300,
+                device=args.device,
+                verbose=False,
+            )
+            for result in results:
+                b = result.boxes
+                arr = np.column_stack(
+                    [b.cls.cpu().numpy(), b.conf.cpu().numpy(), b.xyxy.cpu().numpy()]
+                )
+                preds[Path(result.path)] = arr.reshape(-1, 6)
+            bar.update(len(chunk))
     return preds
 
 

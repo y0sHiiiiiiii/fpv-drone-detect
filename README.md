@@ -156,4 +156,25 @@ Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 
 ## Results
 
-_No trained models yet._
+Test split of Halmstad (1,615 frames from 44 videos never seen in training; 916 multirotor and
+518 bird boxes). Halmstad is a static ground camera filming against mostly sky backgrounds, so
+these numbers say little about FPV footage yet.
+
+| Model | Data | imgsz | mAP@0.5 | mAP@0.5:0.95 | multirotor AP50 | bird AP50 | P / R multirotor @0.25 | P / R bird @0.25 |
+|---|---|---|---|---|---|---|---|---|
+| yolo11s (`baseline`, epoch 29) | Halmstad visible | 1280 | 0.777 | 0.347 | 0.802 | 0.751 | 0.52 / 0.87 | 0.81 / 0.73 |
+| same weights, NMS IoU 0.5 | | 1280 | 0.781 | 0.334 | 0.794 | 0.767 | 0.74 / 0.84 | 0.84 / 0.73 |
+
+mAP and AP values are Ultralytics'. P/R are measured at conf 0.25 and IoU ≥ 0.5. Report:
+`runs/eval/baseline_test/report.md`.
+
+- Almost all objects are small (1,061 of 1,434 boxes < 32² px). Small objects score AP50 0.78,
+  medium ones 0.71.
+- multirotor ↔ bird confusion is rare: 3 birds were detected as multirotor, and no multirotor as
+  bird.
+- Most multirotor false positives are not phantom detections. In 709 of 723 cases the model drew a
+  second box on a drone it had already found, or a box that was offset on the tiny object. With
+  NMS IoU 0.5 instead of 0.7, multirotor precision at conf 0.25 rises from 0.52 to 0.74.
+- Validation mAP peaked at epoch 29 (mAP50 0.894) and then declined while the training loss kept
+  falling. That is overfitting on a small domain, and `best.pt` keeps epoch 29. Training took
+  6.1 h for 100 epochs.
