@@ -7,6 +7,7 @@ Examples:
     python scripts/train.py --name baseline
     python scripts/train.py --smoke
     python scripts/train.py --set epochs=50 imgsz=960 model=yolo11m.pt --name m960
+    python scripts/train.py --resume runs/detect/baseline
 """
 
 import argparse
@@ -153,6 +154,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="quick check: 1 epoch on a random 5 %% of train and 20 %% of val",
     )
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        metavar="RUN_DIR",
+        help="continue an interrupted run (e.g. runs/detect/baseline) from its last.pt",
+    )
     parser.add_argument("--dry-run", action="store_true", help="resolve and print config only")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
@@ -176,6 +183,8 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
+    if args.resume:
+        return resume(resolve_path(args.resume))
     try:
         cfg = build_config(args)
         data_yaml, splits = resolve_dataset(
@@ -192,15 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
-    # All paths above are absolute; work from the weights folder so nothing lands in the repo.
-    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-    os.chdir(WEIGHTS_DIR)
-    try:
-        ensure_ultralytics_settings()
-    except subprocess.CalledProcessError as exc:
-        log.error("could not initialise Ultralytics settings: %s", exc.stderr)
+    if not prepare_ultralytics():
         return 1
-
     from ultralytics import YOLO
 
     model_name = cfg.pop("model", "yolo11s.pt")
@@ -214,6 +216,26 @@ def main(argv: list[str] | None = None) -> int:
         "git": git_state(),
         "environment": environment(),
     }
+    if run_info["git"]["dirty"]:
+        log.warning("working tree has uncommitted changes; the run is not fully reproducible")
+    return train_with_run_info(model, run_info, **cfg)
+
+
+def prepare_ultralytics() -> bool:
+    """Project-local settings and working directory; call before importing ultralytics."""
+    # All paths are absolute; work from the weights folder so nothing lands in the repo.
+    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    os.chdir(WEIGHTS_DIR)
+    try:
+        ensure_ultralytics_settings()
+    except subprocess.CalledProcessError as exc:
+        log.error("could not initialise Ultralytics settings: %s", exc.stderr)
+        return False
+    return True
+
+
+def train_with_run_info(model, run_info: dict[str, Any], **train_args: Any) -> int:
+    """Train, writing fpvdd_run.json when training starts and again with the final metrics."""
     state: dict[str, Path] = {}
 
     def write_run_info(trainer) -> None:
@@ -223,10 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     model.add_callback("on_train_start", write_run_info)
-    if run_info["git"]["dirty"]:
-        log.warning("working tree has uncommitted changes; the run is not fully reproducible")
-
-    results = model.train(**cfg)
+    results = model.train(**train_args)
 
     if "save_dir" in state:
         metrics = getattr(results, "results_dict", None) or {}
@@ -238,6 +257,25 @@ def main(argv: list[str] | None = None) -> int:
             if key in run_info["final_val"]:
                 log.info("%s = %.4f", key, run_info["final_val"][key])
     return 0
+
+
+def resume(run_dir: Path) -> int:
+    """Continue an interrupted run from ``run_dir/weights/last.pt``."""
+    last = run_dir / "weights" / "last.pt"
+    if not last.exists():
+        log.error("nothing to resume: %s not found", last)
+        return 1
+    info_file = run_dir / "fpvdd_run.json"
+    run_info = json.loads(info_file.read_text(encoding="utf-8")) if info_file.exists() else {}
+    run_info.setdefault("resumed", []).append(
+        {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "git": git_state()}
+    )
+    if not prepare_ultralytics():
+        return 1
+    from ultralytics import YOLO
+
+    log.info("resuming %s", last)
+    return train_with_run_info(YOLO(str(last)), run_info, resume=True)
 
 
 if __name__ == "__main__":

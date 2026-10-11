@@ -120,6 +120,9 @@ Results: see `runs/detect/baseline/` and the table below once finished.
 - 2026-10-11: splits are stratified by dominant class per video (still strictly by video).
 - 2026-10-11: no Ultralytics `fraction` for smoke runs. It takes the alphabetically first images,
   which here were only airplane clips (0 boxes), so smoke runs use random subsets instead.
+- 2026-10-11: `workers: 2`. With the default 8, the train loader plus a 2× val loader started
+  26 Python processes (~29 GB of 32 GB RAM) and the first baseline attempt was stopped after
+  1.5 epochs. 2 workers measured equally fast (10 it/s) at ~12 GB peak.
 - 2026-10-11: Ultralytics settings are project-local (`YOLO_CONFIG_DIR=runs/.ultralytics`). The
   global ones pointed to another project's weights/runs folders.
 

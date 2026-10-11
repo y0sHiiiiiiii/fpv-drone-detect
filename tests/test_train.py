@@ -121,6 +121,12 @@ def test_missing_splits_fail_early(tmp_path: Path) -> None:
     assert "split_dataset.py" in result.stderr
 
 
+def test_resume_without_checkpoint_fails(tmp_path: Path) -> None:
+    result = _run("--resume", str(tmp_path / "no_such_run"))
+    assert result.returncode == 1
+    assert "nothing to resume" in result.stderr
+
+
 def test_bad_override_rejected() -> None:
     result = _run("--set", "epochs", "--dry-run")
     assert result.returncode == 1

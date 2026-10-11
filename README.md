@@ -83,7 +83,12 @@ about 18 % background.
 python scripts/train.py --smoke                 # 1 epoch on 5 % of the data, checks the setup
 python scripts/train.py --name baseline         # configs/train.yaml: yolo11s, imgsz 1280, 100 epochs
 python scripts/train.py --set epochs=50 model=yolo11m.pt --name m50   # any Ultralytics override
+python scripts/train.py --resume runs/detect/baseline   # continue an interrupted run
 ```
+
+On the RTX 4070 SUPER the baseline runs at ~40 images/s (batch 4–5 at `imgsz=1280`, the first
+epoch is slower while Windows starts the dataloader workers): ~3.5 min per epoch, ~6 h for 100
+epochs. Progress per epoch is in `runs/detect/<name>/results.csv`.
 
 `train.py` wraps the Ultralytics trainer. It resolves all paths against the repo root, checks the
 split lists first, and keeps downloaded weights in `runs/weights/`. It uses project-local
