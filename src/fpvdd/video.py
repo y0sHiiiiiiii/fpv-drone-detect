@@ -1,6 +1,8 @@
 """Reading frames from video files with OpenCV."""
 
 import logging
+import shutil
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,3 +102,29 @@ def extract_video(
             written += 1
             bar.update()
     return written
+
+
+def open_writer(path: Path, fps: float, width: int, height: int) -> cv2.VideoWriter:
+    """MPEG-4 Part 2 writer (``mp4v``); see :func:`transcode_h264` for wide playback support."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    if not writer.isOpened():
+        raise OSError(f"cannot open video writer: {path}")
+    return writer
+
+
+def transcode_h264(src: Path, dst: Path, crf: int = 20) -> bool:
+    """Re-encode ``src`` to H.264 with FFmpeg; False if FFmpeg is missing or fails.
+
+    OpenCV's ``mp4v`` output plays in VLC but not in browsers and many other players.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        return False
+    cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", str(src), "-c:v", "libx264"]
+    cmd += ["-crf", str(crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(dst)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        log.warning("ffmpeg failed for %s: %s", src.name, result.stderr.strip())
+        return False
+    return True

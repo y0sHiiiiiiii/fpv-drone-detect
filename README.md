@@ -119,7 +119,40 @@ python scripts/evaluate.py --weights ... --limit 200     # quick check on a rand
 
 Don't evaluate on the GPU while a training run uses it: two models at `imgsz=1280` overflow
 the 12 GB VRAM and Windows falls back to very slow shared memory. Use `--device cpu` meanwhile.
-`scripts/infer_video.py` is planned (see roadmap).
+
+## Video inference and tracking
+
+```bash
+python scripts/infer_video.py --weights runs/detect/baseline/weights/best.pt     --source input.mp4 --tracker bytetrack.yaml --output out/
+python scripts/infer_video.py --weights ... --source videos/ --sahi --slice 640   # small objects
+python scripts/infer_video.py --weights ... --source a.mp4 b.mp4 --tracker none   # detection only
+```
+
+For each video, `infer_video.py` writes the following to `--output` (default `runs/infer/`):
+- `<name>_annotated.mp4`: boxes with class, confidence and track ID. Boxes smaller than 8 px are
+  drawn enlarged so tiny objects stay visible. With FFmpeg on the PATH the video is H.264,
+  otherwise MPEG-4 Part 2 (plays in VLC).
+- `<name>_detections.json`: one entry per frame, `{"frame", "timestamp_s", "detections":
+  [{"track_id", "class", "confidence", "bbox_xyxy"}]}`, with boxes in pixels of the source video
+- `<name>_tracks.csv`: one row per track (lifetime, majority class, mean confidence, box size)
+- `infer_run.json`: the settings, the git commit and a summary per video
+
+How it works: every frame goes through the detector, either the full frame or, with `--sahi`,
+overlapping slices (SAHI, plus one full-frame pass for objects cut by slice borders). The boxes
+then go into an Ultralytics tracker (ByteTrack or BoT-SORT, configured by their YAML files). Both
+detection modes use the same tracking path. Defaults that differ from Ultralytics:
+- NMS IoU 0.5 instead of 0.7, plus containment suppression (`--ios 0.8`, 0 turns it off). The
+  suppression drops a box that lies at least 80 % inside a box with higher confidence. On small
+  drones the model often adds a second, larger box around the tight one, and their IoU stays
+  below any useful NMS threshold. On the test videos it cuts the drone tracks from 45 to 31.
+  Details are in [docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
+- the confidence floor is 0.1 with a tracker, as in Ultralytics' track mode, because ByteTrack
+  uses low-confidence boxes to continue tracks. Without a tracker it is 0.25.
+- SAHI slices are fed to the model at the training `imgsz` (`--slice-imgsz`). The baseline was
+  trained on 640×512 frames upscaled to 1280, so 640 px slices see objects at the training scale.
+
+BoT-SORT's ReID with `model: auto` needs hooks inside Ultralytics' predictor, which this script
+does not use, so it is rejected. ByteTrack and BoT-SORT without ReID work.
 
 ## Repository layout
 
@@ -129,9 +162,10 @@ data/           raw/, frames/, labeled/, splits/  (gitignored, never commit)
 sources/        sources.csv  (url, license, date_accessed, notes)
 configs/sources/  per-dataset class mapping and options
 scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
-                convert_halmstad.py, visualize_labels.py, train.py, evaluate.py
+                convert_halmstad.py, visualize_labels.py, train.py, evaluate.py,
+                infer_video.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
-                matlab_gt, halmstad, draw)
+                matlab_gt, halmstad, draw, evaluation, inference)
 docs/experiments/  one write-up per experiment (setup, results, analysis)
 notebooks/      error analysis (planned)
 tests/          pytest tests
@@ -152,7 +186,7 @@ Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 2. ✅ Public dataset ingestion (Halmstad) with class mapping and label QA visualisation
 3. ✅ Baseline training (`scripts/train.py`, yolo11s @ 1280)
 4. ✅ Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
-5. Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON
+5. ✅ Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON
 6. Error analysis notebook and iteration (hard negatives, background share, image size)
 
 ## Results

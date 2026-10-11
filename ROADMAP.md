@@ -11,7 +11,7 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 | 2 | Public dataset ingestion | ✅ (Halmstad) |
 | 3 | Baseline training | ✅ |
 | 4 | Evaluation | ✅ |
-| 5 | Video inference + tracking | ⏳ |
+| 5 | Video inference + tracking | ✅ |
 | 6 | Error analysis + iteration | ⏳ |
 
 ---
@@ -110,18 +110,35 @@ Baseline on `test` (1,615 frames; table in the README, full write-up in
 Fixed: Ultralytics loads a list source into memory as one batch and ignores `batch`. On the full
 test set that was 23.7 GiB, which ran out of memory. `evaluate.py` now predicts in chunks.
 
-## Phase 5: Video inference + tracking ⏳
+## Phase 5: Video inference + tracking ✅
 
-- `scripts/infer_video.py --weights … --source … --tracker bytetrack.yaml [--sahi] --output out/`
-- Ultralytics `model.track()` (ByteTrack / BoT-SORT); with `--sahi`, sliced detections are fed into
-  Ultralytics' tracker
-- outputs `<name>_annotated.mp4` and `<name>_detections.json` (format in `CLAUDE.md`)
-- default NMS IoU 0.5 (see the baseline write-up: removes most duplicate boxes)
+Delivered:
+- `scripts/infer_video.py`: its own frame loop, detection on the full frame or with SAHI slices
+  (`--sahi`), then an Ultralytics tracker (ByteTrack / BoT-SORT from their YAML files, or
+  `--tracker none`). Both detection modes use the same tracking path.
+- outputs per video: `<name>_annotated.mp4` (H.264 via FFmpeg if available),
+  `<name>_detections.json` (format in `CLAUDE.md`), `<name>_tracks.csv`; plus `infer_run.json`
+- `src/fpvdd/inference.py`: conversions, JSON records, track summary, containment suppression;
+  `draw.draw_detections`, `video.open_writer` / `transcode_h264`; tests incl. CLI end-to-end
+- defaults: NMS IoU 0.5, containment suppression `--ios 0.8`, conf 0.1 with tracker
+  (Ultralytics' track default), SAHI slices at the training `imgsz`
+
+Result on the 44 test videos (full write-up in
+[docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md)):
+- 18 drone clips, one drone each: 31 tracks with ByteTrack + IoS 0.8 (45 without IoS);
+  12 of 18 clips give exactly one track; per-frame P/R 0.82 / 0.82. BoT-SORT: same track
+  count, P/R 0.83 / 0.83, slightly slower; ByteTrack stays the default
+- bird clips: P/R 0.89 / 0.70; one airplane clip is tracked as `multirotor` for the whole clip
+- ~55 frames/s at 640×512 without video output on the RTX 4070 SUPER
 
 ## Phase 6: Error analysis + iteration ⏳
 
 - `notebooks/error_analysis.ipynb`: FP/FN galleries, per-size and per-source breakdowns; include
   the FP-by-clip-type and duplicate-box analysis from the baseline write-up
+- video-level evaluation against Halmstad's per-frame labels (all frames, not only the 5 fps
+  samples): per-frame P/R of the tracker output, tracks per object, ID switches. So far an
+  ad-hoc script (see the video tracking write-up); turn it into `scripts/evaluate_video.py`
+- look at the drone clips with 4–5 tracks and the airplane clip tracked as `multirotor`
 - check why medium-sized birds score lower (AP50 0.62) than small ones
 - iterate: hard negatives (birds), background share, `imgsz`, model size, SAHI settings
 - training: ~40 epochs or `patience` ~15 on Halmstad alone (the baseline overfit after epoch 29)
@@ -158,6 +175,14 @@ test set that was 23.7 GiB, which ran out of memory. `evaluate.py` now predicts 
 - 2026-10-11: benchmark mAP keeps Ultralytics' default NMS IoU 0.7, so it stays comparable.
   Phase 5 video inference should default to NMS IoU 0.5, which removes most duplicate boxes on
   small drones.
+
+- 2026-10-11: `infer_video.py` runs its own frame loop and calls Ultralytics' trackers directly
+  instead of `model.track()`. That way full-frame and SAHI detections go through the same
+  tracking code, and the containment suppression can sit between detector and tracker.
+- 2026-10-11: containment suppression (`--ios 0.8`, class-agnostic) is on by default in video
+  inference, but not in `evaluate.py`. It raises precision at the operating point, but removes
+  alternatives at low confidence, so COCO mAP drops (0.753 → 0.722 mAP50 on test), and the
+  benchmark should stay comparable to Ultralytics.
 
 ## Open questions
 
