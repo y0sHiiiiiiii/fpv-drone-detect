@@ -157,6 +157,6 @@ Without IoS, the drone clips have 96 duplicate boxes; with IoS there are none.
 1. ✅ `scripts/evaluate_video.py` (see "Tracking metrics").
 2. ✅ Box precision checked: a size bias of the model on tiny objects (see above). Next, try a
    higher `imgsz`, SAHI and a P2-head model, and compare them with `evaluate_video.py`.
-3. Hard negatives against aircraft: more airplane/helicopter frames as background, or map them to
-   `unknown_aerial` instead of dropping them (a class-schema decision, still open).
+3. Aircraft false positives: decided on 2026-10-11, airplanes and helicopters get their own
+   classes (`airplane`, `helicopter`) instead of being dropped (see ROADMAP).
 4. Test on FPV-like footage, where SAHI and camera motion compensation should matter.

@@ -23,20 +23,48 @@ identified: the model's **box size bias on tiny objects**. The centre is accurat
 predicted box area is 4.2× the labeled area below 15 px and 1.4× at 15–30 px. Details in
 [docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
 
-**Waiting for a decision from the user:**
-1. **Airplanes / helicopters:** decided 2026-10-11, they get labeled instead of dropped, so they can
-   be reviewed later. Still open: map them to the existing `unknown_aerial` (A), or add new classes
-   `airplane` + `helicopter` (B, a schema change in `CLAUDE.md`, `configs/dataset.yaml`, README).
-   Either way: edit `configs/sources/halmstad.yaml` (and for B the class list in `fpvdd.labels`), rerun
-   `convert_halmstad.py` + `split_dataset.py`. The dataset fingerprint changes, so all later runs
-   need a new baseline.
-2. **Order of experiments** (recommended, not yet confirmed): (1) class change + new baseline
-   (yolo11s, imgsz 1280, 40 epochs, ~2.5 h measured from the baseline log); (2) meanwhile, a test
-   with no training: the old weights at `--imgsz 1920` and with SAHI on the test videos, to see
-   whether more pixels shrink the box size bias (~30 min); (3) then a P2 head with our own
-   `yolo11-p2` config (based on Ultralytics' `yolov8-p2.yaml`) plus `yolo11s.pt` weights, rather
-   than imgsz 1920. The 640×512 source gains no detail from upscaling, and 1920 costs ~5–6 h for 40
-   epochs at batch ~2.
+**Decided by the user (2026-10-11):**
+1. **Two new classes, `airplane` (5) and `helicopter` (6)** (option B). Airplanes and helicopters are
+   labeled instead of dropped, so the user can review them and decide later how to treat them.
+   `CLAUDE.md` and the README class tables are already updated. Configs, code and data are not.
+2. **Order of experiments** (as recommended):
+   1. class migration (below) + **new baseline**: yolo11s, imgsz 1280, 40 epochs (~2.5 h, measured
+      from the old baseline log). It is needed first because the dataset changes, so later
+      experiments would not be comparable with the old runs anyway.
+   2. while it trains, or before: a **test with no training**. Run the old baseline weights on the
+      test videos at `--imgsz 1920` and with SAHI (`--sahi --slice 320`), then `evaluate_video.py`
+      plus the size-bias table. Question: do more pixels per object shrink the oversized boxes?
+      (~30 min; run it on the CPU, or before training starts: no GPU inference during training.)
+   3. then a **P2 head**: our own `configs/models/yolo11-p2.yaml` (yolo11 backbone + stride-4 head
+      as in Ultralytics' `yolov8-p2.yaml`) with `pretrained=yolo11s.pt`, so only the head differs.
+      Same data and epochs as the new baseline. Preferred over imgsz 1920: the 640×512 source gains
+      no detail from upscaling, and 1920 costs ~5–6 h for 40 epochs at batch ~2. Do imgsz 1920
+      only if step 2 shows a clear gain.
+
+**Migration to 7 classes (to do, in this order):**
+- `src/fpvdd/labels.py`: append `airplane`, `helicopter` to `CLASS_NAMES` (ids 5, 6; existing ids
+  stay unchanged, so old label files stay valid)
+- `configs/dataset.yaml`: `names` 5 and 6
+- `src/fpvdd/draw.py`: two more entries in `CLASS_COLORS` (`draw_boxes` indexes them directly)
+- `configs/sources/halmstad.yaml`: `airplane: airplane`, `helicopter: helicopter`
+- **background share (open, decide during the migration):** airplane/helicopter clips were the
+  only source of background frames (~18 %). With them labeled, background drops to ~0 %, below the
+  required 10–20 %. Options:
+  - frames inside clips where the object is not labeled (count them first; probably few)
+  - background tiles cropped from Halmstad frames away from any labeled object
+  - background frames from another dataset
+
+  `negative_fps` then no longer applies to these clips: they are sampled at 5 fps like the
+  others, unless their share has to be capped.
+- tests: `NAMES` lists in `tests/test_inference.py` and `tests/test_video_eval.py`, plus
+  label/mapping tests
+- rerun `convert_halmstad.py`, `visualize_labels.py --class airplane` / `--class helicopter`
+  (visual QA), and `split_dataset.py`. Strata now include airplane/helicopter. The dataset
+  fingerprint changes.
+- `evaluate_video.py`: airplane/helicopter boxes become targets; the `other_object` FP kind only
+  remains for labels that still map to nothing
+- the old baseline (5 classes) stays the reference for old results only; new results get a new
+  README results table
 
 **Planned experiments** (each: train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py`
 on the 44 test videos, a write-up in `docs/experiments/`, a row in the README results table):
@@ -221,8 +249,8 @@ Next:
 - box size bias on tiny objects (checked: the model, not the labels). Predicted box area vs.
   labeled area is 4.2× below 15 px, 1.4× at 15–30 px and 0.8× above 30 px. Try a higher `imgsz`,
   SAHI with upscaled tiles, and a P2-head model (stride 4); compare with `evaluate_video.py`.
-- aircraft false positives: more airplane/helicopter background frames, or map them to
-  `unknown_aerial` (class-schema decision, see open questions)
+- aircraft false positives: decided, airplanes/helicopters get their own classes (see "Next
+  session"). Check on the new baseline whether the false tracks on aircraft disappear.
 - check why medium-sized birds score lower (AP50 0.62) than small ones
 - iterate: hard negatives (birds), background share, `imgsz`, model size, SAHI settings
 - training: ~40 epochs or `patience` ~15 on Halmstad alone (the baseline overfit after epoch 29)
@@ -238,7 +266,7 @@ Next:
 - 2026-10-11: first dataset is Halmstad only (CC0); visible videos only, IR optional via
   `--modality`.
 - 2026-10-11: classes outside our schema (airplane, helicopter): drop the box, keep the frame as
-  a negative. No new classes.
+  a negative. No new classes. (Superseded on 2026-10-11, see below.)
 - 2026-10-11: `mcos-decoder` 0.1.0 rejected. It identifies frames by byte size, so a 2-box cell
   looks like an empty one, and it skips 3+ box cells (12 bird clips misaligned, e.g. 1 of 302
   frames). It was replaced by our own MAT5 parser (needs only scipy).
@@ -271,12 +299,19 @@ Next:
   switches and fragmentation are small and have their own tests; HOTA is not implemented.
 - 2026-10-11: `evaluate_video.py` matches at IoU 0.5 by default, like `evaluate.py`. The video
   write-up also shows IoU 0.3, because most errors on tiny objects are boxes slightly off.
+- 2026-10-11 (user): new classes `airplane` (5) and `helicopter` (6). Halmstad airplanes and
+  helicopters are labeled instead of dropped, so they can be reviewed and their treatment decided
+  later. Reason: as background they became stable false `multirotor`/`bird` tracks. Existing ids
+  0–4 stay unchanged.
+- 2026-10-11 (user): experiment order: class migration + new baseline (40 epochs, imgsz 1280), a
+  resolution test with no training on the old weights, then a P2 head (own `yolo11-p2` config);
+  imgsz 1920 only if the resolution test shows a clear gain.
 
 ## Open questions
 
 - More datasets later? Candidates: Drone-vs-Bird (on request, birds unlabeled), Anti-UAV300
   (license unclear), MAV-VID / Roboflow via a generic YOLO import.
-- Airplanes and helicopters are dropped (decision above), but the model takes them for
-  `multirotor`/`bird` and forms stable false tracks. Map them to `unknown_aerial` instead?
+- Where do background frames come from once airplane/helicopter clips are labeled? (see the
+  migration list in "Next session")
 - Phase 3: domain gap to FPV footage. A small hand-labeled FPV test set would show how well
   Halmstad-only training transfers.

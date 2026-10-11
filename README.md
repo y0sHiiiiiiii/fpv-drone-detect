@@ -18,6 +18,11 @@ specific military models or units, and geolocation. See `CLAUDE.md`.
 | 2 | `vtol` | hybrids with rotors and wings |
 | 3 | `bird` | negative class against false positives |
 | 4 | `unknown_aerial` | aerial object, not clearly assignable |
+| 5 | `airplane` | manned fixed-wing aircraft (planned) |
+| 6 | `helicopter` | manned rotorcraft with a main rotor (planned) |
+
+Classes 5 and 6 were decided on 2026-10-11 but are not implemented yet: configs, code, data and
+all trained models still use classes 0–4. See [ROADMAP.md](ROADMAP.md), "Next session".
 
 ## Setup
 
@@ -75,7 +80,8 @@ Airplane and helicopter boxes are dropped and their frames are kept as negatives
 `negative_fps` to keep the background share in range. The MATLAB `groundTruth` label files are
 read by `fpvdd.matlab_gt`, a small MAT5 parser that handles any number of boxes per frame.
 Result with the defaults: 285 clips → 10,610 frames, 6,098 multirotor and 3,652 bird boxes,
-about 18 % background.
+about 18 % background. Planned: airplane → `airplane` and helicopter → `helicopter` instead of
+dropping them (see Classes).
 
 ## Training and evaluation
 
