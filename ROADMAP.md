@@ -24,14 +24,19 @@ predicted box area is 4.2× the labeled area below 15 px and 1.4× at 15–30 px
 [docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
 
 **Waiting for a decision from the user:**
-1. **Airplanes / helicopters → `unknown_aerial`?** They are dropped today (frames kept as
-   background). The model takes them for `multirotor`/`bird` and forms stable false tracks
-   (`V_AIRPLANE_032`, several helicopter clips). Changing it means editing
-   `configs/sources/halmstad.yaml`, rerunning `convert_halmstad.py` + `split_dataset.py` (the
-   dataset fingerprint changes, so old and new runs are no longer directly comparable), and
-   retraining. Class schema changes only on the user's say (`CLAUDE.md`).
-2. **Which GPU experiment first?** Proposed: (a) higher `imgsz`, (b) P2 head. Each takes ~1–2 h on
-   the RTX 4070 SUPER.
+1. **Airplanes / helicopters:** decided 2026-10-11, they get labeled instead of dropped, so they can
+   be reviewed later. Still open: map them to the existing `unknown_aerial` (A), or add new classes
+   `airplane` + `helicopter` (B, a schema change in `CLAUDE.md`, `configs/dataset.yaml`, README).
+   Either way: edit `configs/sources/halmstad.yaml` (and for B the class list in `fpvdd.labels`), rerun
+   `convert_halmstad.py` + `split_dataset.py`. The dataset fingerprint changes, so all later runs
+   need a new baseline.
+2. **Order of experiments** (recommended, not yet confirmed): (1) class change + new baseline
+   (yolo11s, imgsz 1280, 40 epochs, ~2.5 h measured from the baseline log); (2) meanwhile, a test
+   with no training: the old weights at `--imgsz 1920` and with SAHI on the test videos, to see
+   whether more pixels shrink the box size bias (~30 min); (3) then a P2 head with our own
+   `yolo11-p2` config (based on Ultralytics' `yolov8-p2.yaml`) plus `yolo11s.pt` weights, rather
+   than imgsz 1920. The 640×512 source gains no detail from upscaling, and 1920 costs ~5–6 h for 40
+   epochs at batch ~2.
 
 **Planned experiments** (each: train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py`
 on the 44 test videos, a write-up in `docs/experiments/`, a row in the README results table):
@@ -39,9 +44,9 @@ on the 44 test videos, a write-up in `docs/experiments/`, a row in the README re
 - (a) `imgsz=1920`: more pixels per tiny object. Check that autobatch still fits in 12 GB VRAM;
   run `--smoke` first.
 - (b) P2 head (stride 4): Ultralytics 8.4.175 ships `yolov8-p2.yaml` and `yolo26-p2.yaml`, but no
-  `yolo11-p2.yaml`. The P2 configs have no pretrained weights of their own; something like
-  `--set model=yolov8s-p2.yaml pretrained=yolov8s.pt` should load matching backbone weights, but
-  this is not verified yet.
+  `yolo11-p2.yaml`. Write `configs/models/yolo11-p2.yaml` (yolo11 backbone + P2 head as in
+  yolov8-p2) and train with `pretrained=yolo11s.pt`, so only the head differs from the baseline.
+  Whether the weights load as expected (backbone and neck where shapes match) is not verified yet.
 - (c) SAHI with upscaled tiles on the existing baseline weights (no training):
   `infer_video.py --sahi --slice 320` (tiles are fed at imgsz 1280, i.e. 4×). Only 8 frames/s.
 - metrics to compare against: the baseline row in the README and the video tracking write-up
