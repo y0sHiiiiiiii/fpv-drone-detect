@@ -1,0 +1,17 @@
+# Halmstad multi-sensor drone detection dataset (Svanström et al., Data in Brief 2021), CC0-1.0.
+# Download manually and unpack to data/raw/halmstad/.
+name: halmstad
+
+# Label name in the .mat files -> our class, or null = drop the box but keep the frame as a
+# negative example. All drones in this dataset are multirotors.
+class_map:
+  drone: multirotor
+  bird: bird
+  airplane: null
+  helicopter: null
+
+options:
+  modalities: [visible] # visible | ir
+  # Airplane/helicopter clips only yield background frames. Sampling them at 1.5 fps instead of
+  # 5 fps keeps the background share around 18 % (at 5 fps it would be ~45 %).
+  negative_fps: 1.5

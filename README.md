@@ -55,8 +55,27 @@ python scripts/split_dataset.py --by video --ratios 0.7 0.15 0.15
 ```
 
 Frame names must follow `<video_id>_fNNNNNN.<ext>`, because the video id in the name is how
-`split_dataset.py` keeps every video in a single split. It also validates all labels and warns if
-the training set's background share (frames without objects) falls outside 10–20 %.
+`split_dataset.py` keeps every video in a single split. By default it also stratifies by each
+video's dominant class, so every split gets a similar class mix. It validates all labels and warns
+if the training set's background share (frames without objects) falls outside 10–20 %.
+
+### Public datasets
+
+**Halmstad drone detection dataset** (CC0-1.0, [GitHub](https://github.com/DroneDetectionThesis/Drone-detection-dataset),
+[Zenodo](https://doi.org/10.5281/zenodo.5500576)): download and unpack it to `data/raw/halmstad/`, then run
+
+```bash
+python scripts/convert_halmstad.py            # visible videos, 5 fps -> data/labeled/images/halmstad/...
+python scripts/visualize_labels.py --subdir halmstad --class bird   # check boxes in data/qa/
+python scripts/split_dataset.py
+```
+
+The class mapping lives in `configs/sources/halmstad.yaml`: drone → `multirotor`, bird → `bird`.
+Airplane and helicopter boxes are dropped and their frames are kept as negatives, sampled at
+`negative_fps` to keep the background share in range. The MATLAB `groundTruth` label files are
+read by `fpvdd.matlab_gt`, a small MAT5 parser that handles any number of boxes per frame.
+Result with the defaults: 285 clips → 10,610 frames, 6,098 multirotor and 3,652 bird boxes,
+about 18 % background.
 
 ## Training and evaluation
 
@@ -75,8 +94,11 @@ Run `yolo` commands from the repo root, because `configs/dataset.yaml` resolves 
 configs/        dataset.yaml, train.yaml
 data/           raw/, frames/, labeled/, splits/  (gitignored, never commit)
 sources/        sources.csv  (url, license, date_accessed, notes)
-scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py
-src/fpvdd/      shared helpers (naming, labels, video, dedupe, split)
+configs/sources/  per-dataset class mapping and options
+scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
+                convert_halmstad.py, visualize_labels.py
+src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
+                matlab_gt, halmstad, draw)
 notebooks/      error analysis (planned)
 tests/          pytest tests
 ```
@@ -93,7 +115,7 @@ ruff check . && ruff format --check .
 Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 
 1. ✅ Scaffolding and data prep (extract, dedupe, split by video) with tests
-2. Public dataset converters → YOLO format and class mapping, label QA visualisation
+2. ✅ Public dataset ingestion (Halmstad) with class mapping and label QA visualisation
 3. Baseline training (`scripts/train.py`, yolo11s @ 1280)
 4. Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
 5. Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON

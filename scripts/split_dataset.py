@@ -12,13 +12,14 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from fpvdd.labels import CLASS_NAMES, LabelError, parse_label_file
+from fpvdd.labels import CLASS_NAMES, LabelError, YoloBox, parse_label_file
 from fpvdd.log import setup_logging
 from fpvdd.paths import IMAGE_EXTS, LABELED_DIR, SPLITS_DIR
 from fpvdd.split import (
     SPLIT_NAMES,
     LeakageError,
     assign_splits,
+    assign_splits_stratified,
     background_ratio,
     check_no_leakage,
     group_by_video,
@@ -53,9 +54,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[0.7, 0.15, 0.15],
         metavar=("TRAIN", "VAL", "TEST"),
     )
+    parser.add_argument(
+        "--stratify",
+        choices=["class", "none"],
+        default="class",
+        help="balance each video's dominant class (or background) across splits",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
+
+
+def video_stratum(boxes_per_frame: list[list[YoloBox]]) -> str:
+    """Dominant class name over all boxes of a video, or 'background' if it has none."""
+    counts = Counter(b.class_name for boxes in boxes_per_frame for b in boxes)
+    return counts.most_common(1)[0][0] if counts else "background"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,10 +105,16 @@ def main(argv: list[str] | None = None) -> int:
         log.error("all images must be named <video_id>_fNNNNNN.<ext> to split by video")
         return 1
 
+    sizes = {vid: len(p) for vid, p in groups.items()}
+    strata = {
+        vid: video_stratum([boxes_per_image[p] for p in paths]) for vid, paths in groups.items()
+    }
     try:
-        assignment = assign_splits(
-            {vid: len(p) for vid, p in groups.items()}, args.ratios, args.seed
-        )
+        if args.stratify == "class":
+            log.info("strata (videos): %s", dict(sorted(Counter(strata.values()).items())))
+            assignment = assign_splits_stratified(sizes, strata, args.ratios, args.seed)
+        else:
+            assignment = assign_splits(sizes, args.ratios, args.seed)
     except ValueError as exc:
         log.error("%s", exc)
         return 1
@@ -119,10 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     manifest = args.output / "split_manifest.csv"
     with manifest.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["video_id", "split", "n_images", "n_background"])
+        writer.writerow(["video_id", "split", "stratum", "n_images", "n_background"])
         for vid, paths in groups.items():
             n_bg = sum(not boxes_per_image[p] for p in paths)
-            writer.writerow([vid, assignment[vid], len(paths), n_bg])
+            writer.writerow([vid, assignment[vid], strata[vid], len(paths), n_bg])
 
     total = len(images)
     for split, paths in split_images.items():

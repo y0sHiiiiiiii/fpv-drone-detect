@@ -8,8 +8,8 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 | Phase | Topic | Status |
 |---|---|---|
 | 1 | Scaffolding + data prep | ✅ |
-| 2 | Public dataset ingestion | 🚧 |
-| 3 | Baseline training | ⏳ |
+| 2 | Public dataset ingestion | ✅ (Halmstad) |
+| 3 | Baseline training | ⏳ next |
 | 4 | Evaluation | ⏳ |
 | 5 | Video inference + tracking | ⏳ |
 | 6 | Error analysis + iteration | ⏳ |
@@ -34,16 +34,31 @@ Key conventions:
 - Splits are list files (`data/splits/{train,val,test}.txt`) with absolute paths; nothing is copied.
 - Dedupe never deletes; it moves files to `_duplicates/`.
 
-## Phase 2: Public dataset ingestion 🚧
+## Phase 2: Public dataset ingestion ✅ (Halmstad)
 
 Goal: bring public research datasets into the unified `data/labeled/` layout with our 5 classes.
 
-Deliverables:
-- converter per source format → YOLO labels + frames named by the convention
-- class mapping per dataset in a config file (source class → our class or `drop`)
-- `sources/sources.csv` row per dataset (url, license, date accessed, notes)
-- label QA script: draws boxes on random samples for visual checks
-- tests with small synthetic fixtures for every converter
+Delivered:
+- `src/fpvdd/matlab_gt.py`: MAT5 parser for MATLAB `groundTruth` label files (any number of
+  boxes per frame); `src/fpvdd/halmstad.py` + `scripts/convert_halmstad.py`
+- `src/fpvdd/sources.py` + `configs/sources/halmstad.yaml`: class mapping per label name
+- `scripts/visualize_labels.py` (+ `src/fpvdd/draw.py`): annotated samples + contact sheets
+- `split_dataset.py --stratify class` (default): balances each video's dominant class
+- `sources/sources.csv` row for Halmstad; tests for parser, converter, mapping, QA script
+
+Halmstad result (visible only, 5 fps, negatives at 1.5 fps):
+- 285 clips → 10,610 frames; 6,098 `multirotor` and 3,652 `bird` boxes; 1,972 airplane/helicopter
+  boxes dropped; ~18 % background in every split
+- all 285 label files match their video frame count exactly; no box outside the image
+- validated on the real dataset: identical to `mcos-decoder` on 36,368 single-box frames, and
+  visual QA sheets checked for drones and birds
+
+Known limitations of the data:
+- small domain: three multirotor models, mostly sky backgrounds, static ground camera, 640×512.
+  This is far from FPV footage, so expect a large domain gap.
+- objects are often only a few pixels wide: use `imgsz=1280` and consider SAHI
+- Halmstad labels only the clip's own class; other objects in a clip (e.g. distant birds) can be
+  unlabeled
 
 Rules:
 - Datasets are downloaded manually into `data/raw/<dataset>/`; no download tools.
@@ -85,8 +100,19 @@ Rules:
 - 2026-10-11: standalone git repo in `TrenchView/` (was untracked inside the parent `dev/` repo).
 - 2026-10-11: start with public research datasets; own footage later.
 - 2026-10-11: dedupe uses a 64-bit dHash, compared within a video against the last kept frame.
+- 2026-10-11: first dataset is Halmstad only (CC0); visible videos only, IR optional via
+  `--modality`.
+- 2026-10-11: classes outside our schema (airplane, helicopter): drop the box, keep the frame as
+  a negative. No new classes.
+- 2026-10-11: `mcos-decoder` 0.1.0 rejected. It identifies frames by byte size, so a 2-box cell
+  looks like an empty one, and it skips 3+ box cells (12 bird clips misaligned, e.g. 1 of 302
+  frames). It was replaced by our own MAT5 parser (needs only scipy).
+- 2026-10-11: `negative_fps: 1.5` for airplane/helicopter clips, so background stays at 10–20 %.
+- 2026-10-11: splits are stratified by dominant class per video (still strictly by video).
 
 ## Open questions
 
-- Phase 2: which datasets exactly, and how their classes map to ours
-  (e.g. airplane/helicopter → `unknown_aerial` or drop).
+- More datasets later? Candidates: Drone-vs-Bird (on request, birds unlabeled), Anti-UAV300
+  (license unclear), MAV-VID / Roboflow via a generic YOLO import.
+- Phase 3: domain gap to FPV footage. A small hand-labeled FPV test set would show how well
+  Halmstad-only training transfers.

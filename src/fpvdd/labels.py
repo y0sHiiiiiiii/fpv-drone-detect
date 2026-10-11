@@ -36,6 +36,26 @@ class YoloBox:
     def class_name(self) -> str:
         return CLASS_NAMES[self.class_id]
 
+    @classmethod
+    def from_pixels(
+        cls, class_id: int, x: float, y: float, w: float, h: float, img_w: int, img_h: int
+    ) -> "YoloBox | None":
+        """Build from a top-left ``x, y, w, h`` pixel box, clipped to the image.
+
+        Returns None if nothing of the box is left inside the image.
+        """
+        x1, y1 = max(0.0, x), max(0.0, y)
+        x2, y2 = min(float(img_w), x + w), min(float(img_h), y + h)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return cls(
+            class_id,
+            (x1 + x2) / 2 / img_w,
+            (y1 + y2) / 2 / img_h,
+            (x2 - x1) / img_w,
+            (y2 - y1) / img_h,
+        )
+
     def to_line(self) -> str:
         return (
             f"{self.class_id} {self.x_center:.6f} {self.y_center:.6f} "

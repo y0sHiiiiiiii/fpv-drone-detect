@@ -2,6 +2,7 @@ import csv
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from fpvdd.paths import REPO_ROOT
 from fpvdd.split import (
     LeakageError,
     assign_splits,
+    assign_splits_stratified,
     background_ratio,
     check_no_leakage,
     group_by_video,
@@ -73,6 +75,28 @@ def test_invalid_ratios(ratios: tuple[float, ...]) -> None:
 def test_too_few_videos() -> None:
     with pytest.raises(ValueError, match="at least 3 videos"):
         assign_splits({"a": 5, "b": 5}, RATIOS)
+
+
+def test_stratified_balances_each_stratum() -> None:
+    sizes = {f"d{i}": 50 for i in range(20)} | {f"b{i}": 50 for i in range(20)}
+    strata = {vid: "drone" if vid.startswith("d") else "bird" for vid in sizes}
+    assignment = assign_splits_stratified(sizes, strata, RATIOS, seed=0)
+    for stratum in ("drone", "bird"):
+        counts = Counter(s for v, s in assignment.items() if strata[v] == stratum)
+        assert counts == {"train": 14, "val": 3, "test": 3}
+
+
+def test_stratified_pools_small_strata() -> None:
+    sizes = {f"d{i}": 10 for i in range(10)} | {"rare1": 10, "rare2": 10}
+    strata = {v: "rare" if v.startswith("rare") else "drone" for v in sizes}
+    assignment = assign_splits_stratified(sizes, strata, RATIOS, seed=0)
+    assert set(assignment) == set(sizes)
+    assert set(assignment.values()) == {"train", "val", "test"}
+
+
+def test_stratified_too_few_videos() -> None:
+    with pytest.raises(ValueError):
+        assign_splits_stratified({"a": 1, "b": 1}, {"a": "x", "b": "y"}, RATIOS)
 
 
 def test_check_no_leakage() -> None:

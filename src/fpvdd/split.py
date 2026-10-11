@@ -77,6 +77,51 @@ def assign_splits(
     return {vid: split for split, vids in members.items() for vid in vids}
 
 
+def assign_splits_stratified(
+    group_sizes: Mapping[str, int],
+    strata: Mapping[str, str],
+    ratios: Sequence[float],
+    seed: int = 0,
+) -> dict[str, str]:
+    """Like :func:`assign_splits`, but approximates ``ratios`` within each stratum.
+
+    ``strata`` maps each video to a stratum (e.g. its dominant class). Strata with fewer
+    videos than non-empty splits cannot be split on their own; they are pooled and split
+    together. Whole videos still always go to exactly one split.
+    """
+    _validate_ratios(ratios)
+    n_active = sum(r > 0 for r in ratios)
+    if len(group_sizes) < n_active:
+        raise ValueError(f"need at least {n_active} videos, got {len(group_sizes)}")
+    by_stratum: dict[str, dict[str, int]] = defaultdict(dict)
+    for vid, size in group_sizes.items():
+        by_stratum[strata[vid]][vid] = size
+
+    assignment: dict[str, str] = {}
+    pooled: dict[str, int] = {}
+    for _name, sizes in sorted(by_stratum.items()):
+        if len(sizes) >= n_active:
+            assignment.update(assign_splits(sizes, ratios, seed))
+        else:
+            pooled.update(sizes)
+    if pooled:
+        if len(pooled) >= n_active:
+            assignment.update(assign_splits(pooled, ratios, seed))
+        else:
+            # too few leftovers to split: send them where the totals lag most behind target
+            total = sum(group_sizes.values())
+            current = dict.fromkeys(SPLIT_NAMES, 0)
+            for vid, split in assignment.items():
+                current[split] += group_sizes[vid]
+            active = [s for s, r in zip(SPLIT_NAMES, ratios, strict=True) if r > 0]
+            share = dict(zip(SPLIT_NAMES, ratios, strict=True))
+            for vid in sorted(pooled, key=lambda v: -pooled[v]):
+                split = max(active, key=lambda s: share[s] * total - current[s])
+                assignment[vid] = split
+                current[split] += pooled[vid]
+    return assignment
+
+
 def check_no_leakage(split_images: Mapping[str, Iterable[Path]]) -> None:
     """Raise LeakageError if any video id occurs in more than one split."""
     seen: dict[str, str] = {}
