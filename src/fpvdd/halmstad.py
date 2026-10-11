@@ -22,6 +22,7 @@ from fpvdd.labels import YoloBox, write_label_file
 from fpvdd.matlab_gt import FrameLabels, PixelBox, load_groundtruth
 from fpvdd.naming import frame_filename
 from fpvdd.video import iter_frames, probe
+from fpvdd.video_eval import GTBox
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +122,34 @@ def frame_boxes(
             else:
                 boxes.append(box)
     return boxes, dropped
+
+
+def video_ground_truth(
+    frames: Sequence[FrameLabels], map_class: Callable[[str], int | None]
+) -> tuple[dict[int, list[GTBox]], bool]:
+    """Per-frame ground truth for video evaluation; returns ``(frames, has_identities)``.
+
+    Halmstad has no object ids. If no frame contains more than one object of our classes, all
+    such boxes belong to the same object (id 1) and identity metrics can be computed;
+    otherwise the ids stay None.
+    """
+    mapped = [
+        [
+            (map_class(name), matlab_to_pixels(box))
+            for name, boxes in labels.items()
+            for box in boxes
+        ]
+        for labels in frames
+    ]
+    single = all(sum(cls is not None for cls, _ in f) <= 1 for f in mapped)
+    out = {
+        idx: [
+            GTBox(cls, (x, y, x + w, y + h), 1 if single and cls is not None else None)
+            for cls, (x, y, w, h) in f
+        ]
+        for idx, f in enumerate(mapped)
+    }
+    return out, single
 
 
 def convert_clip(

@@ -1,4 +1,4 @@
-"""Markdown report for evaluate.py results."""
+"""Markdown reports for evaluate.py and evaluate_video.py results."""
 
 from typing import Any
 
@@ -154,3 +154,114 @@ def _bird_note(names: list[str], matrix: list[list[int]]) -> list[str]:
         f"{matrix[m][b]} birds detected as multirotor, "
         f"{matrix[b][m]} multirotors detected as bird.",
     ]
+
+
+def _identity_cells(ident: dict[str, Any] | None) -> list[str]:
+    if ident is None:
+        return ["–"] * 7
+    return [
+        _f(ident["mota"]),
+        _f(ident["idf1"]),
+        str(ident["idsw"]),
+        str(ident["frag"]),
+        str(ident["tracks"]),
+        str(ident["false_tracks"]),
+        _f(ident["tracks_per_object"], 2),
+    ]
+
+
+def render_video_report(results: dict[str, Any]) -> str:
+    """Human-readable summary of one evaluate_video.py run."""
+    s = results["settings"]
+    n_videos = len(results["videos"])
+    no_ids = [v["video"] for v in results["videos"] if v["metrics"]["identity"] is None]
+    lines = [
+        f"# Video evaluation: `{s['pred']}`",
+        "",
+        f"- dataset: {s['dataset']}, {n_videos} videos, matching IoU ≥ {s['iou']}, "
+        f"class-aware" + (f", confidence ≥ {s['conf']}" if s["conf"] else ""),
+        f"- inference settings: {results.get('inference') or 'unknown (no infer_run.json)'}",
+        "- identity metrics (MOTA, IDF1, ID switches, tracks) only cover videos with object ids"
+        + (f"; without ids: {', '.join(no_ids)}" if no_ids else ""),
+        *(
+            [f"- **videos from the training or validation split: {', '.join(results['leaked'])}**"]
+            if results["leaked"]
+            else []
+        ),
+        "",
+        "## Summary",
+        "",
+    ]
+    header = ["group", "videos", "frames", "GT", "P", "R", "F1", "mean IoU"]
+    header += ["MOTA", "IDF1", "ID sw", "frag", "tracks", "false tracks", "tracks/object"]
+    rows = []
+    for group, g in [*results["groups"].items(), ("**all**", results["overall"])]:
+        m = g["metrics"]
+        rows.append(
+            [
+                group,
+                str(g["videos"]),
+                str(m["frames"]),
+                str(m["gt"]),
+                _f(m["precision"]),
+                _f(m["recall"]),
+                _f(m["f1"]),
+                _f(m["mean_iou"]),
+                *_identity_cells(m["identity"]),
+            ]
+        )
+    lines += _table(header, rows)
+
+    kinds = list(results["overall"]["metrics"]["fp_by_kind"])
+    lines += ["", "## False positives by kind", ""]
+    lines += [
+        "wrong_class: on one of our objects, wrong class · duplicate: second box on an object "
+        "that is already matched · localization: IoU 0.1 to the matching threshold · "
+        "other_object: on a labeled object outside our classes · background: nothing labeled",
+        "",
+    ]
+    rows = [
+        [group, str(g["metrics"]["fp"]), *(str(g["metrics"]["fp_by_kind"][k]) for k in kinds)]
+        for group, g in [*results["groups"].items(), ("**all**", results["overall"])]
+    ]
+    lines += _table(["group", "FP", *kinds], rows)
+
+    lines += ["", "## Per class", ""]
+    rows = [
+        [name, str(c["tp"]), str(c["fp"]), str(c["fn"]), _f(c["precision"]), _f(c["recall"])]
+        for name, c in results["overall"]["metrics"]["per_class"].items()
+    ]
+    lines += _table(["class", "TP", "FP", "FN", "precision", "recall"], rows)
+
+    def badness(v: dict[str, Any]) -> tuple[int, int]:
+        ident = v["metrics"]["identity"] or {}
+        extra = ident.get("tracks", 0) - ident.get("objects_tracked", 0)
+        return (
+            ident.get("false_tracks", 0) + ident.get("idsw", 0) + max(extra, 0),
+            v["metrics"]["fp"],
+        )
+
+    worst = sorted(results["videos"], key=badness, reverse=True)[:15]
+    worst = [v for v in worst if badness(v) != (0, 0)]
+    if worst:
+        lines += ["", "## Videos to look at", ""]
+        lines += [
+            "Sorted by false tracks + ID switches + surplus tracks, then false positives.",
+            "",
+        ]
+        rows = []
+        for v in worst:
+            m = v["metrics"]
+            rows.append(
+                [
+                    v["video"],
+                    v["group"],
+                    str(m["gt"]),
+                    _f(m["precision"]),
+                    _f(m["recall"]),
+                    *_identity_cells(m["identity"])[2:],
+                ]
+            )
+        header = ["video", "group", "GT", "P", "R", "ID sw", "frag", "tracks", "false tracks"]
+        lines += _table([*header, "tracks/object"], rows)
+    return "\n".join(lines) + "\n"

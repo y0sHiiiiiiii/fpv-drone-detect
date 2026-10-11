@@ -12,7 +12,70 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 | 3 | Baseline training | ✅ |
 | 4 | Evaluation | ✅ |
 | 5 | Video inference + tracking | ✅ |
-| 6 | Error analysis + iteration | ⏳ |
+| 6 | Error analysis + iteration | 🚧 |
+
+---
+
+## Next session: where we left off (2026-10-11 evening)
+
+State: phases 1–5 are done. In phase 6, video evaluation (`evaluate_video.py`) is done and the main error is
+identified: the model's **box size bias on tiny objects**. The centre is accurate to ~1 px, but the
+predicted box area is 4.2× the labeled area below 15 px and 1.4× at 15–30 px. Details in
+[docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
+
+**Waiting for a decision from the user:**
+1. **Airplanes / helicopters → `unknown_aerial`?** They are dropped today (frames kept as
+   background). The model takes them for `multirotor`/`bird` and forms stable false tracks
+   (`V_AIRPLANE_032`, several helicopter clips). Changing it means editing
+   `configs/sources/halmstad.yaml`, rerunning `convert_halmstad.py` + `split_dataset.py` (the
+   dataset fingerprint changes, so old and new runs are no longer directly comparable), and
+   retraining. Class schema changes only on the user's say (`CLAUDE.md`).
+2. **Which GPU experiment first?** Proposed: (a) higher `imgsz`, (b) P2 head. Each takes ~1–2 h on
+   the RTX 4070 SUPER.
+
+**Planned experiments** (each: train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py`
+on the 44 test videos, a write-up in `docs/experiments/`, a row in the README results table):
+- common change: `epochs=40` (the baseline peaked at epoch 29 and then overfit), or `patience=15`
+- (a) `imgsz=1920`: more pixels per tiny object. Check that autobatch still fits in 12 GB VRAM;
+  run `--smoke` first.
+- (b) P2 head (stride 4): Ultralytics 8.4.175 ships `yolov8-p2.yaml` and `yolo26-p2.yaml`, but no
+  `yolo11-p2.yaml`. The P2 configs have no pretrained weights of their own; something like
+  `--set model=yolov8s-p2.yaml pretrained=yolov8s.pt` should load matching backbone weights, but
+  this is not verified yet.
+- (c) SAHI with upscaled tiles on the existing baseline weights (no training):
+  `infer_video.py --sahi --slice 320` (tiles are fed at imgsz 1280, i.e. 4×). Only 8 frames/s.
+- metrics to compare against: the baseline row in the README and the video tracking write-up
+  (drones P/R 0.82 / 0.82, MOTA 0.64, IDF1 0.79 at IoU 0.5). Also report the size-bias table.
+
+**Commands to reproduce the current numbers** (outputs in `runs/`, which is not committed):
+
+```bash
+# 44 test videos -> runs/infer/baseline_test (each video is <stem>.mp4 in Video_V/)
+V=data/raw/halmstad/DroneDetectionThesis-Drone-detection-dataset-e7a6eaf/Data/Video_V
+SRC=$(grep ",test," data/splits/split_manifest.csv | cut -d, -f1 | sed "s#halmstad_\(.*\)#$V/\1.mp4#")
+python scripts/infer_video.py --weights runs/detect/baseline/weights/best.pt --source $SRC \
+    --output runs/infer/baseline_test --no-video
+python scripts/evaluate_video.py --pred runs/infer/baseline_test            # IoU 0.5
+python scripts/evaluate_video.py --pred runs/infer/baseline_test --iou 0.3 \
+    --output runs/infer/baseline_test/video_eval_iou03
+```
+
+Existing outputs: `runs/infer/baseline_test{,_ios0,_botsort}/` (each with `video_eval/`),
+`runs/infer/dev*/` (annotated sample videos), `runs/eval/baseline_test{,_nms05}/`.
+
+**Not in the repo yet** (ad-hoc analyses done in a scratch script, to be moved into
+`notebooks/error_analysis.ipynb`):
+- the size-bias measurement (predicted/labeled area by labeled box size, from
+  `<pred>/*_detections.json` + `fpvdd.halmstad.video_ground_truth`, best-IoU prediction per frame)
+- the containment suppression check on saved test predictions (`runs/eval/baseline_test_nms05/`
+  `coco_predictions.json`, P/R at conf 0.25 for IoS 0.6–0.9)
+- crops of predicted vs. labeled boxes for visual checks
+
+Environment notes: `.venv` in the repo; `lap` was installed into it for the trackers (now in
+`requirements.txt`). FFmpeg is on the PATH (needed for the H.264 output).
+
+Afterwards (bigger topics, see open questions): more public datasets and a small FPV test set
+labeled in CVAT, because all numbers so far come from Halmstad's ground camera.
 
 ---
 
@@ -131,14 +194,30 @@ Result on the 44 test videos (full write-up in
 - bird clips: P/R 0.89 / 0.70; one airplane clip is tracked as `multirotor` for the whole clip
 - ~55 frames/s at 640×512 without video output on the RTX 4070 SUPER
 
-## Phase 6: Error analysis + iteration ⏳
+## Phase 6: Error analysis + iteration 🚧
 
+Delivered so far:
+- `scripts/evaluate_video.py` + `src/fpvdd/video_eval.py`: tracker output vs. per-frame labels;
+  P/R/F1 per clip type and class, false positives by kind (wrong class, duplicate, localization,
+  other object, background), MOTA, IDF1, ID switches, fragmentation, false tracks, tracks per
+  object, split-leakage check. Identity metrics only where the labels identify objects
+  (Halmstad: clips with ≤ 1 object of our classes per frame, 42 of 44 test clips).
+- result on the test videos (ByteTrack, IoS 0.8; details in the video tracking write-up):
+  - drones P/R 0.82 / 0.82, MOTA 0.64, IDF1 0.79 at IoU 0.5, but 0.97 / 0.98, MOTA 0.95,
+    IDF1 0.94 at IoU 0.3. 915 of 990 drone FPs are boxes on the drone with IoU 0.1–0.5:
+    localization of tiny objects is the main error, not detection.
+  - bird recall stays at 0.78 even at IoU 0.3 (real misses)
+  - false tracks on negative clips are real airplanes/helicopters, plus label gaps (an
+    unlabeled speck) and one camera turn mid-clip
+
+Next:
 - `notebooks/error_analysis.ipynb`: FP/FN galleries, per-size and per-source breakdowns; include
   the FP-by-clip-type and duplicate-box analysis from the baseline write-up
-- video-level evaluation against Halmstad's per-frame labels (all frames, not only the 5 fps
-  samples): per-frame P/R of the tracker output, tracks per object, ID switches. So far an
-  ad-hoc script (see the video tracking write-up); turn it into `scripts/evaluate_video.py`
-- look at the drone clips with 4–5 tracks and the airplane clip tracked as `multirotor`
+- box size bias on tiny objects (checked: the model, not the labels). Predicted box area vs.
+  labeled area is 4.2× below 15 px, 1.4× at 15–30 px and 0.8× above 30 px. Try a higher `imgsz`,
+  SAHI with upscaled tiles, and a P2-head model (stride 4); compare with `evaluate_video.py`.
+- aircraft false positives: more airplane/helicopter background frames, or map them to
+  `unknown_aerial` (class-schema decision, see open questions)
 - check why medium-sized birds score lower (AP50 0.62) than small ones
 - iterate: hard negatives (birds), background share, `imgsz`, model size, SAHI settings
 - training: ~40 epochs or `patience` ~15 on Halmstad alone (the baseline overfit after epoch 29)
@@ -175,7 +254,6 @@ Result on the 44 test videos (full write-up in
 - 2026-10-11: benchmark mAP keeps Ultralytics' default NMS IoU 0.7, so it stays comparable.
   Phase 5 video inference should default to NMS IoU 0.5, which removes most duplicate boxes on
   small drones.
-
 - 2026-10-11: `infer_video.py` runs its own frame loop and calls Ultralytics' trackers directly
   instead of `model.track()`. That way full-frame and SAHI detections go through the same
   tracking code, and the containment suppression can sit between detector and tracker.
@@ -183,10 +261,17 @@ Result on the 44 test videos (full write-up in
   inference, but not in `evaluate.py`. It raises precision at the operating point, but removes
   alternatives at low confidence, so COCO mAP drops (0.753 → 0.722 mAP50 on test), and the
   benchmark should stay comparable to Ultralytics.
+- 2026-10-11: video metrics are implemented in the repo (`fpvdd.video_eval`) instead of using
+  `motmetrics`, whose last release (1.4.0, 2022) predates numpy 2 / pandas 3. MOTA, IDF1, ID
+  switches and fragmentation are small and have their own tests; HOTA is not implemented.
+- 2026-10-11: `evaluate_video.py` matches at IoU 0.5 by default, like `evaluate.py`. The video
+  write-up also shows IoU 0.3, because most errors on tiny objects are boxes slightly off.
 
 ## Open questions
 
 - More datasets later? Candidates: Drone-vs-Bird (on request, birds unlabeled), Anti-UAV300
   (license unclear), MAV-VID / Roboflow via a generic YOLO import.
+- Airplanes and helicopters are dropped (decision above), but the model takes them for
+  `multirotor`/`bird` and forms stable false tracks. Map them to `unknown_aerial` instead?
 - Phase 3: domain gap to FPV footage. A small hand-labeled FPV test set would show how well
   Halmstad-only training transfers.

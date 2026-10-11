@@ -154,6 +154,29 @@ detection modes use the same tracking path. Defaults that differ from Ultralytic
 BoT-SORT's ReID with `model: auto` needs hooks inside Ultralytics' predictor, which this script
 does not use, so it is rejected. ByteTrack and BoT-SORT without ReID work.
 
+### Evaluating video output
+
+`evaluate_video.py` compares the output of `infer_video.py` with per-frame ground truth. It
+currently supports Halmstad, which labels every frame:
+
+```bash
+python scripts/evaluate_video.py --pred runs/infer/baseline_test
+python scripts/evaluate_video.py --pred runs/infer/baseline_test --iou 0.3 \
+    --output runs/infer/baseline_test/video_eval_iou03
+```
+
+It writes `report.md`, `metrics.json` and `per_video.csv` to `<pred>/video_eval/`:
+- precision / recall / F1 per clip type and per class
+- false positives by kind: wrong class, duplicate box, localization (IoU 0.1 up to the
+  threshold), another labeled object (e.g. an airplane), background
+- MOTA, IDF1, ID switches, fragmentation, false tracks and tracks per object
+- the videos to look at first
+
+Matching is class-aware and one-to-one per frame. As in CLEAR MOT, an object keeps its previous
+track while that track still overlaps it enough. Halmstad has no object ids, so identity metrics
+only cover clips with at most one object of our classes per frame. The script warns if a video
+comes from the training or validation split.
+
 ## Repository layout
 
 ```
@@ -163,9 +186,9 @@ sources/        sources.csv  (url, license, date_accessed, notes)
 configs/sources/  per-dataset class mapping and options
 scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
                 convert_halmstad.py, visualize_labels.py, train.py, evaluate.py,
-                infer_video.py
+                infer_video.py, evaluate_video.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
-                matlab_gt, halmstad, draw, evaluation, inference)
+                matlab_gt, halmstad, draw, evaluation, inference, video_eval)
 docs/experiments/  one write-up per experiment (setup, results, analysis)
 notebooks/      error analysis (planned)
 tests/          pytest tests
@@ -187,7 +210,8 @@ Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 3. ✅ Baseline training (`scripts/train.py`, yolo11s @ 1280)
 4. ✅ Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
 5. ✅ Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON
-6. Error analysis notebook and iteration (hard negatives, background share, image size)
+6. 🚧 Error analysis and iteration: video tracking metrics done (`evaluate_video.py`); error
+   analysis notebook, hard negatives, background share and image size next
 
 ## Results
 
@@ -211,6 +235,11 @@ problems hit during the run) is in [docs/experiments/2026-10-11_baseline.md](doc
 - Most multirotor false positives are not phantom detections. In 709 of 723 cases the model drew a
   second box on a drone it had already found, or a box that was offset on the tiny object. With
   NMS IoU 0.5 instead of 0.7, multirotor precision at conf 0.25 rises from 0.52 to 0.74.
+- On video with tracking (ByteTrack, all 44 test videos at the full frame rate,
+  `evaluate_video.py`), drones reach P/R 0.82 / 0.82, MOTA 0.64 and IDF1 0.79 at IoU 0.5. At
+  IoU 0.3 they reach 0.97 / 0.98, MOTA 0.95 and IDF1 0.94. So the model finds the drones, but on
+  objects 20–35 px wide its boxes are often a few pixels off. Write-up:
+  [docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
 - Validation mAP peaked at epoch 29 (mAP50 0.894) and then declined while the training loss kept
   falling. That is overfitting on a small domain, and `best.pt` keeps epoch 29. Training took
   6.1 h for 100 epochs.
