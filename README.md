@@ -80,12 +80,22 @@ about 18 % background.
 ## Training and evaluation
 
 ```bash
-yolo detect train data=configs/dataset.yaml model=yolo11s.pt imgsz=1280 epochs=100
-# or with the defaults from configs/train.yaml:
-yolo detect train cfg=configs/train.yaml
+python scripts/train.py --smoke                 # 1 epoch on 5 % of the data, checks the setup
+python scripts/train.py --name baseline         # configs/train.yaml: yolo11s, imgsz 1280, 100 epochs
+python scripts/train.py --set epochs=50 model=yolo11m.pt --name m50   # any Ultralytics override
 ```
 
-Run `yolo` commands from the repo root, because `configs/dataset.yaml` resolves `data/` from there.
+`train.py` wraps the Ultralytics trainer. It resolves all paths against the repo root, checks the
+split lists first, and keeps downloaded weights in `runs/weights/`. It uses project-local
+Ultralytics settings in `runs/.ultralytics/`, so your global Ultralytics settings (e.g. another
+project's `weights_dir`) are neither used nor changed. `--smoke` trains on random subsets: Ultralytics'
+`fraction` takes the alphabetically first images, which here are whole clips of one class. Each run directory gets an
+`fpvdd_run.json` with the git commit, a dataset fingerprint (hash of split membership and label
+contents), the resolved config, package versions, GPU and the final validation metrics.
+W&B logging is Ultralytics' built-in integration: `pip install wandb` and `yolo settings wandb=True`.
+
+Plain Ultralytics works too, run from the repo root:
+`yolo detect train cfg=configs/train.yaml`.
 `scripts/evaluate.py` and `scripts/infer_video.py` are planned (see roadmap).
 
 ## Repository layout
@@ -96,7 +106,7 @@ data/           raw/, frames/, labeled/, splits/  (gitignored, never commit)
 sources/        sources.csv  (url, license, date_accessed, notes)
 configs/sources/  per-dataset class mapping and options
 scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
-                convert_halmstad.py, visualize_labels.py
+                convert_halmstad.py, visualize_labels.py, train.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
                 matlab_gt, halmstad, draw)
 notebooks/      error analysis (planned)

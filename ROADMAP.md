@@ -9,7 +9,7 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 |---|---|---|
 | 1 | Scaffolding + data prep | ✅ |
 | 2 | Public dataset ingestion | ✅ (Halmstad) |
-| 3 | Baseline training | ⏳ next |
+| 3 | Baseline training | 🚧 baseline run in progress |
 | 4 | Evaluation | ⏳ |
 | 5 | Video inference + tracking | ⏳ |
 | 6 | Error analysis + iteration | ⏳ |
@@ -66,12 +66,21 @@ Rules:
   by video; document the strategy per dataset.
 - No new classes without asking the user.
 
-## Phase 3: Baseline training ⏳
+## Phase 3: Baseline training 🚧
 
-- `scripts/train.py`: thin wrapper around the Ultralytics trainer, reads `configs/train.yaml`,
-  CLI overrides, optional W&B/MLflow
-- baseline: yolo11s, `imgsz=1280`, 100 epochs on the RTX 4070 SUPER (12 GB)
-- record the run config + dataset manifest hash with each run
+Delivered:
+- `scripts/train.py`: wrapper around the Ultralytics trainer; `configs/train.yaml` +
+  `--set key=value` overrides, `--smoke`, `--dry-run`; W&B via Ultralytics' built-in integration
+- `src/fpvdd/runinfo.py`: `fpvdd_run.json` per run with git commit, dataset fingerprint (split
+  membership + label contents), resolved config, versions, GPU, final val metrics
+- project-local Ultralytics settings (`runs/.ultralytics/`), weights in `runs/weights/`
+
+Environment: `.venv` in the repo (excluded from Nextcloud), torch 2.14.1+cu126,
+ultralytics 8.4.175, RTX 4070 SUPER. Autobatch picks batch 4–5 at `imgsz=1280`.
+`data/` and `runs/` are in the Nextcloud exclude list.
+
+Baseline run: `python scripts/train.py --name baseline` (yolo11s, imgsz 1280, 100 epochs).
+Results: see `runs/detect/baseline/` and the table below once finished.
 
 ## Phase 4: Evaluation ⏳
 
@@ -109,6 +118,10 @@ Rules:
   frames). It was replaced by our own MAT5 parser (needs only scipy).
 - 2026-10-11: `negative_fps: 1.5` for airplane/helicopter clips, so background stays at 10–20 %.
 - 2026-10-11: splits are stratified by dominant class per video (still strictly by video).
+- 2026-10-11: no Ultralytics `fraction` for smoke runs. It takes the alphabetically first images,
+  which here were only airplane clips (0 boxes), so smoke runs use random subsets instead.
+- 2026-10-11: Ultralytics settings are project-local (`YOLO_CONFIG_DIR=runs/.ultralytics`). The
+  global ones pointed to another project's weights/runs folders.
 
 ## Open questions
 
