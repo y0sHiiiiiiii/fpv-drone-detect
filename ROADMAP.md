@@ -10,7 +10,7 @@ Status: ✅ done · 🚧 in progress · ⏳ planned
 | 1 | Scaffolding + data prep | ✅ |
 | 2 | Public dataset ingestion | ✅ (Halmstad) |
 | 3 | Baseline training | 🚧 baseline run in progress |
-| 4 | Evaluation | ⏳ |
+| 4 | Evaluation | 🚧 script done, final baseline eval pending |
 | 5 | Video inference + tracking | ⏳ |
 | 6 | Error analysis + iteration | ⏳ |
 
@@ -82,12 +82,20 @@ ultralytics 8.4.175, RTX 4070 SUPER. Autobatch picks batch 4–5 at `imgsz=1280`
 Baseline run: `python scripts/train.py --name baseline` (yolo11s, imgsz 1280, 100 epochs).
 Results: see `runs/detect/baseline/` and the table below once finished.
 
-## Phase 4: Evaluation ⏳
+## Phase 4: Evaluation 🚧
 
-- `scripts/evaluate.py --weights … --split test`
-- mAP@0.5, mAP@0.5:0.95, per-class precision/recall, confusion matrix (watch multirotor ↔ bird)
-- metrics by object size (COCO area ranges small/medium/large) via pycocotools
-- results to `runs/`, summary table in README on request
+Delivered:
+- `scripts/evaluate.py`: one Ultralytics `val` pass (standard mAP) plus one predict pass that
+  feeds pycocotools and our own operating-point matching
+- `src/fpvdd/evaluation.py`: YOLO labels → COCO, COCO AP/AR per class × size, class-agnostic
+  one-to-one matching for the confusion matrix, P/R at a fixed confidence
+- `src/fpvdd/eval_report.py`: `report.md` (overall, per class, by size, confusion matrix,
+  multirotor ↔ bird)
+- provenance checks: split leakage, dataset fingerprint vs. the training run, unfinished training
+- verified: COCO and Ultralytics mAP agree (0.771 vs 0.767 mAP50 on a dev subset)
+
+Pending: final evaluation of `runs/detect/baseline/weights/best.pt` on `test` once training
+finishes; results table below and in the README.
 
 ## Phase 5: Video inference + tracking ⏳
 
@@ -123,6 +131,11 @@ Results: see `runs/detect/baseline/` and the table below once finished.
 - 2026-10-11: `workers: 2`. With the default 8, the train loader plus a 2× val loader started
   26 Python processes (~29 GB of 32 GB RAM) and the first baseline attempt was stopped after
   1.5 epochs. 2 workers measured equally fast (10 it/s) at ~12 GB peak.
+- 2026-10-11: the confusion matrix and P/R come from our own matching at conf 0.25 / IoU 0.5.
+  Ultralytics fills its matrix at the validation conf of 0.001, where low-confidence boxes swamp
+  the false-positive column.
+- 2026-10-11: no GPU evaluation during training. Both together overflowed the 12 GB of VRAM
+  and predict stalled.
 - 2026-10-11: Ultralytics settings are project-local (`YOLO_CONFIG_DIR=runs/.ultralytics`). The
   global ones pointed to another project's weights/runs folders.
 

@@ -13,9 +13,6 @@ Examples:
 import argparse
 import json
 import logging
-import os
-import random
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -25,14 +22,17 @@ import yaml
 
 from fpvdd.log import setup_logging
 from fpvdd.paths import CONFIGS_DIR, REPO_ROOT
-from fpvdd.runinfo import dataset_fingerprint, environment, git_state, read_split_list
+from fpvdd.runinfo import dataset_fingerprint, environment, git_state
+from fpvdd.yolo_env import (
+    WEIGHTS_DIR,
+    prepare_ultralytics,
+    resolve_dataset,
+    resolve_path,
+    sample_split,
+)
 
 log = logging.getLogger("train")
 
-WEIGHTS_DIR = REPO_ROOT / "runs" / "weights"
-# Project-local Ultralytics settings, so global settings (weights_dir, runs_dir of other
-# projects) are neither used nor modified.
-ULTRALYTICS_CONFIG_DIR = REPO_ROOT / "runs" / ".ultralytics"
 SMOKE_OVERRIDES = {"epochs": 1, "plots": False}
 # Ultralytics' `fraction` takes the alphabetically first images (whole clips of one class), so
 # smoke runs use random subsets of the split lists instead.
@@ -50,80 +50,17 @@ def parse_overrides(items: list[str]) -> dict[str, Any]:
     return overrides
 
 
-def resolve_path(value: str | Path, base: Path = REPO_ROOT) -> Path:
-    path = Path(value)
-    return path if path.is_absolute() else (base / path).resolve()
-
-
-def sample_split(path: Path, share: float, seed: int, out: Path) -> Path:
-    """Write a random ``share`` of the images listed in ``path`` to ``out``."""
-    images = read_split_list(path)
-    k = max(1, round(len(images) * share))
-    picked = sorted(random.Random(seed).sample(images, k))
-    out.write_text("".join(f"{p}\n" for p in picked), encoding="utf-8")
-    return out
-
-
-def resolve_dataset(dataset_yaml: Path, smoke: bool = False) -> tuple[Path, dict[str, Path]]:
-    """Write a copy of the dataset YAML with an absolute ``path``; return it and the split lists.
-
-    The dataset ``path`` is resolved relative to the repository root, so training works from
-    any working directory. The copy is written next to the train split list. With ``smoke``,
-    train/val point to random subsets (see SMOKE_SAMPLE).
-    """
-    cfg = yaml.safe_load(dataset_yaml.read_text(encoding="utf-8"))
-    root = resolve_path(cfg.get("path", "."))
-    cfg["path"] = str(root)
-    splits = {s: resolve_path(cfg[s], root) for s in ("train", "val", "test") if cfg.get(s)}
-    check_splits(splits)
+def resolve_training_dataset(dataset_yaml: Path, smoke: bool) -> tuple[Path, dict[str, Path]]:
+    """Resolved dataset YAML; with ``smoke``, train/val are random subsets (SMOKE_SAMPLE)."""
+    resolved, splits = resolve_dataset(dataset_yaml)
+    if not smoke:
+        return resolved, splits
     out_dir = splits["train"].parent
-    if smoke:
-        for split, share in SMOKE_SAMPLE.items():
-            splits[split] = sample_split(splits[split], share, 0, out_dir / f"smoke_{split}.txt")
-            cfg[split] = str(splits[split])
-    suffix = ".smoke" if smoke else ""
-    resolved = out_dir / f"{dataset_yaml.stem}{suffix}.resolved.yaml"
-    resolved.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
-    return resolved, splits
-
-
-def check_splits(splits: dict[str, Path]) -> None:
-    """Fail early with a helpful message if the split lists are missing or empty."""
-    for name in ("train", "val"):
-        path = splits.get(name)
-        if path is None or not path.exists():
-            raise FileNotFoundError(f"{name} split list missing ({path}); run split_dataset.py")
-        if not read_split_list(path):
-            raise ValueError(f"{name} split list {path} is empty")
-
-
-def ensure_ultralytics_settings() -> None:
-    """Point Ultralytics at project-local settings with our weights/runs folders.
-
-    Ultralytics only honours YOLO_CONFIG_DIR if the folder exists, and reads ``weights_dir``
-    into a constant at import time. So the folder is created first and the settings are
-    written by a separate process before this process imports ultralytics. The user's global
-    Ultralytics settings are never touched.
-    """
-    os.environ["YOLO_CONFIG_DIR"] = str(ULTRALYTICS_CONFIG_DIR)
-    wanted = {"weights_dir": str(WEIGHTS_DIR), "runs_dir": str(REPO_ROOT / "runs")}
-    settings_file = ULTRALYTICS_CONFIG_DIR / "Ultralytics" / "settings.json"
-    if settings_file.exists():
-        current = json.loads(settings_file.read_text(encoding="utf-8"))
-        if all(current.get(k) == v for k, v in wanted.items()):
-            return
-    ULTRALYTICS_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    code = (
-        "import json, sys; from ultralytics import settings; "
-        "settings.update(json.loads(sys.argv[1]))"
-    )
-    subprocess.run(
-        [sys.executable, "-c", code, json.dumps(wanted)],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
+    replace = {
+        split: sample_split(splits[split], share, 0, out_dir / f"smoke_{split}.txt")
+        for split, share in SMOKE_SAMPLE.items()
+    }
+    return resolve_dataset(dataset_yaml, replace=replace, suffix=".smoke")
 
 
 def resolve_model(model: str) -> str:
@@ -187,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         return resume(resolve_path(args.resume))
     try:
         cfg = build_config(args)
-        data_yaml, splits = resolve_dataset(
+        data_yaml, splits = resolve_training_dataset(
             resolve_path(cfg.get("data", "configs/dataset.yaml")), smoke=args.smoke
         )
     except (OSError, ValueError, KeyError) as exc:
@@ -219,19 +156,6 @@ def main(argv: list[str] | None = None) -> int:
     if run_info["git"]["dirty"]:
         log.warning("working tree has uncommitted changes; the run is not fully reproducible")
     return train_with_run_info(model, run_info, **cfg)
-
-
-def prepare_ultralytics() -> bool:
-    """Project-local settings and working directory; call before importing ultralytics."""
-    # All paths are absolute; work from the weights folder so nothing lands in the repo.
-    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-    os.chdir(WEIGHTS_DIR)
-    try:
-        ensure_ultralytics_settings()
-    except subprocess.CalledProcessError as exc:
-        log.error("could not initialise Ultralytics settings: %s", exc.stderr)
-        return False
-    return True
 
 
 def train_with_run_info(model, run_info: dict[str, Any], **train_args: Any) -> int:

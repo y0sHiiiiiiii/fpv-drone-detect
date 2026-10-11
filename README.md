@@ -101,7 +101,25 @@ W&B logging is Ultralytics' built-in integration: `pip install wandb` and `yolo 
 
 Plain Ultralytics works too, run from the repo root:
 `yolo detect train cfg=configs/train.yaml`.
-`scripts/evaluate.py` and `scripts/infer_video.py` are planned (see roadmap).
+
+```bash
+python scripts/evaluate.py --weights runs/detect/baseline/weights/best.pt --split test
+python scripts/evaluate.py --weights ... --limit 200     # quick check on a random subset
+```
+
+`evaluate.py` writes `runs/eval/<run>_<split>/report.md` and `metrics.json` with:
+- mAP@0.5 and mAP@0.5:0.95 from Ultralytics and from pycocotools
+- per-class AP, plus precision/recall both at Ultralytics' best-F1 confidence and at a fixed
+  operating point (`--op-conf 0.25`, IoU ≥ 0.5)
+- AP per class and object size (COCO: small < 32², medium < 96², large, in original pixels)
+- a confusion matrix at the operating point, with multirotor ↔ bird spelled out. Ultralytics'
+  own matrix uses conf 0.001 and is dominated by low-confidence boxes.
+- checks that no video appears in two splits and that the dataset matches the training run
+- COCO ground truth and predictions as JSON for error analysis
+
+Don't evaluate on the GPU while a training run uses it: two models at `imgsz=1280` overflow
+the 12 GB VRAM and Windows falls back to very slow shared memory. Use `--device cpu` meanwhile.
+`scripts/infer_video.py` is planned (see roadmap).
 
 ## Repository layout
 
@@ -111,7 +129,7 @@ data/           raw/, frames/, labeled/, splits/  (gitignored, never commit)
 sources/        sources.csv  (url, license, date_accessed, notes)
 configs/sources/  per-dataset class mapping and options
 scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
-                convert_halmstad.py, visualize_labels.py, train.py
+                convert_halmstad.py, visualize_labels.py, train.py, evaluate.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
                 matlab_gt, halmstad, draw)
 notebooks/      error analysis (planned)
