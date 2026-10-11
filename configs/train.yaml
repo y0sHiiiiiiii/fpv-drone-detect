@@ -1,0 +1,8 @@
+# Ultralytics training overrides. Usage: yolo detect train cfg=configs/train.yaml
+model: yolo11s.pt
+data: configs/dataset.yaml
+imgsz: 1280
+epochs: 100
+batch: -1 # autobatch (~60 % of GPU memory)
+seed: 0
+project: runs/detect

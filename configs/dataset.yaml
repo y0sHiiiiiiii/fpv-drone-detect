@@ -1,0 +1,14 @@
+# YOLO dataset config. Run yolo commands from the repo root: `path` is resolved from there.
+# Split lists are written by scripts/split_dataset.py (split by video, never by frame).
+path: data
+train: splits/train.txt
+val: splits/val.txt
+test: splits/test.txt
+
+# Keep this order; it must match fpvdd.labels.CLASS_NAMES.
+names:
+  0: multirotor
+  1: fixed_wing
+  2: vtol
+  3: bird
+  4: unknown_aerial

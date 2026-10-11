@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fpv-drone-detect"
+version = "0.1.0"
+description = "Offline detection and classification of drones in recorded FPV video with YOLO."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "pyyaml",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "PTH"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

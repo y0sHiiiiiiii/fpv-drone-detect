@@ -1,0 +1,9 @@
+# Install a CUDA build of torch first (see README), otherwise pip pulls the CPU build.
+ultralytics>=8.3
+sahi>=0.11
+opencv-python>=4.9
+numpy>=1.26
+pandas>=2.1
+tqdm>=4.66
+pyyaml>=6.0
+-e .
