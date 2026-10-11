@@ -132,6 +132,7 @@ scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
                 convert_halmstad.py, visualize_labels.py, train.py, evaluate.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
                 matlab_gt, halmstad, draw)
+docs/experiments/  one write-up per experiment (setup, results, analysis)
 notebooks/      error analysis (planned)
 tests/          pytest tests
 ```
@@ -149,8 +150,8 @@ Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 
 1. ✅ Scaffolding and data prep (extract, dedupe, split by video) with tests
 2. ✅ Public dataset ingestion (Halmstad) with class mapping and label QA visualisation
-3. Baseline training (`scripts/train.py`, yolo11s @ 1280)
-4. Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
+3. ✅ Baseline training (`scripts/train.py`, yolo11s @ 1280)
+4. ✅ Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
 5. Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON
 6. Error analysis notebook and iteration (hard negatives, background share, image size)
 
@@ -166,7 +167,8 @@ these numbers say little about FPV footage yet.
 | same weights, NMS IoU 0.5 | | 1280 | 0.781 | 0.334 | 0.794 | 0.767 | 0.74 / 0.84 | 0.84 / 0.73 |
 
 mAP and AP values are Ultralytics'. P/R are measured at conf 0.25 and IoU ≥ 0.5. Report:
-`runs/eval/baseline_test/report.md`.
+`runs/eval/baseline_test/report.md`. The full write-up (setup, training curve, FP analysis,
+problems hit during the run) is in [docs/experiments/2026-10-11_baseline.md](docs/experiments/2026-10-11_baseline.md).
 
 - Almost all objects are small (1,061 of 1,434 boxes < 32² px). Small objects score AP50 0.78,
   medium ones 0.71.

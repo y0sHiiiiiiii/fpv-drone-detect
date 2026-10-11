@@ -99,7 +99,8 @@ Delivered:
 - provenance checks: split leakage, dataset fingerprint vs. the training run, unfinished training
 - verified: COCO and Ultralytics mAP agree (0.771 vs 0.767 mAP50 on a dev subset)
 
-Baseline on `test` (1,615 frames; full table in the README):
+Baseline on `test` (1,615 frames; table in the README, full write-up in
+[docs/experiments/2026-10-11_baseline.md](docs/experiments/2026-10-11_baseline.md)):
 - mAP@0.5 0.777, mAP@0.5:0.95 0.347; multirotor AP50 0.802, bird AP50 0.751
 - 74 % of the boxes are small (< 32² px)
 - multirotor ↔ bird: 3 birds detected as multirotor, 0 multirotors detected as bird
@@ -115,11 +116,15 @@ test set that was 23.7 GiB, which ran out of memory. `evaluate.py` now predicts 
 - Ultralytics `model.track()` (ByteTrack / BoT-SORT); with `--sahi`, sliced detections are fed into
   Ultralytics' tracker
 - outputs `<name>_annotated.mp4` and `<name>_detections.json` (format in `CLAUDE.md`)
+- default NMS IoU 0.5 (see the baseline write-up: removes most duplicate boxes)
 
 ## Phase 6: Error analysis + iteration ⏳
 
-- `notebooks/error_analysis.ipynb`: FP/FN galleries, per-size and per-source breakdowns
+- `notebooks/error_analysis.ipynb`: FP/FN galleries, per-size and per-source breakdowns; include
+  the FP-by-clip-type and duplicate-box analysis from the baseline write-up
+- check why medium-sized birds score lower (AP50 0.62) than small ones
 - iterate: hard negatives (birds), background share, `imgsz`, model size, SAHI settings
+- training: ~40 epochs or `patience` ~15 on Halmstad alone (the baseline overfit after epoch 29)
 - later: own videos annotated in CVAT
 
 ---
