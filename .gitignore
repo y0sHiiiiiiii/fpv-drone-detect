@@ -26,3 +26,7 @@ dist/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+
+# Local AI assistant files
+CLAUDE.md
+.claude/

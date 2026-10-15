@@ -1,7 +1,7 @@
 # Roadmap
 
 Working plan for fpv-drone-detect. Update the status, decisions and open questions here whenever a
-phase changes. Scope rules from `CLAUDE.md` apply to every phase.
+phase changes. The scope rules ("Responsible use" in the README) apply to every phase.
 
 Status: ✅ done · 🚧 in progress · ⏳ planned
 
@@ -200,7 +200,7 @@ Delivered:
   (`--sahi`), then an Ultralytics tracker (ByteTrack / BoT-SORT from their YAML files, or
   `--tracker none`). Both detection modes use the same tracking path.
 - outputs per video: `<name>_annotated.mp4` (H.264 via FFmpeg if available),
-  `<name>_detections.json` (format in `CLAUDE.md`), `<name>_tracks.csv`; plus `infer_run.json`
+  `<name>_detections.json` (format in the README), `<name>_tracks.csv`; plus `infer_run.json`
 - `src/fpvdd/inference.py`: conversions, JSON records, track summary, containment suppression;
   `draw.draw_detections`, `video.open_writer` / `transcode_h264`; tests incl. CLI end-to-end
 - defaults: NMS IoU 0.5, containment suppression `--ios 0.8`, conf 0.1 with tracker
