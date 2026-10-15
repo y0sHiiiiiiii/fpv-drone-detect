@@ -41,37 +41,38 @@ Halmstad was reconverted and resplit:
   labels that map to nothing.
 
 **Running / next (experiment order decided by the user on 2026-10-11):**
-1. 🚧 **new baseline** `baseline7`: yolo11s, imgsz 1280, 40 epochs (`configs/train.yaml` default
-   is now 40). Then `evaluate.py` on test, `infer_video.py` + `evaluate_video.py` on the test
-   videos, write-up, new README results table. Check whether the false tracks on aircraft are gone.
-2. **resolution test with no training** on the old 5-class weights: test videos of the *old*
-   split (`data/splits_5class_2026-10-11/split_manifest.csv`) at `--imgsz 1920` and with SAHI
-   (`--sahi --slice 320`), then `evaluate_video.py` + the size-bias table. No GPU inference while
-   training runs.
-3. **P2 head**: our own `configs/models/yolo11-p2.yaml` (yolo11 backbone + stride-4 head as in
-   Ultralytics' `yolov8-p2.yaml`) with `pretrained=yolo11s.pt`, same data and epochs as step 1.
-   imgsz 1920 only if step 2 shows a clear gain.
+1. ✅ **new baseline** `baseline7` (yolo11s, imgsz 1280, 40 epochs, best epoch 21): test mAP50
+   0.847 / mAP50-95 0.415; on video, drones P/R 0.89 / 0.91, MOTA 0.77, IDF1 0.83. **No multirotor
+   track on any aircraft clip anymore.** New error: airplane ↔ helicopter ↔ bird confusion, plus
+   lens-dirt specks detected as birds (`V_AIRPLANE_040`). Box size bias only slightly smaller.
+   Write-up: [docs/experiments/2026-10-15_baseline7.md](docs/experiments/2026-10-15_baseline7.md).
+   Overfitting from epoch ~21 on: use 25 epochs for further runs on this data.
+2. ✅ **resolution test with no training** (old 5-class weights, old test split): no gain.
+   imgsz 1920 at inference drops drone MOTA from 0.64 to 0.54, and SAHI 320 to 0.45. Upscaling
+   shifts the size bias (tiny boxes less too large, large boxes now too small) but the mean IoU
+   barely moves, and new background false positives appear. Write-up:
+   [docs/experiments/2026-10-15_resolution_test.md](docs/experiments/2026-10-15_resolution_test.md).
+   So the P2 head trains at imgsz 1280.
+3. 🚧 **P2 head** `p2`: `configs/models/yolo11-p2.yaml` (yolo11.yaml up to layer 16, plus the P2
+   branch of `yolov8-p2.yaml` with C3k2 blocks; 9.6 M parameters, 29 GFLOPs vs 21.7). Selected as
+   `model=configs/models/yolo11s-p2.yaml` (the scale comes from the file name, as in Ultralytics),
+   `pretrained=yolo11s.pt` transfers 297 of 593 tensors (backbone and top-down path, layers 0–16).
+   Autobatch picks batch 3. Same data as step 1, 25 epochs; started 2026-10-15 ~12:25, log
+   `runs/p2_train.log`. Then compare against `baseline7` (test, video, size bias).
 
-**Planned experiments** (each: train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py`
-on the 44 test videos, a write-up in `docs/experiments/`, a row in the README results table):
-- common change: `epochs=40` (the baseline peaked at epoch 29 and then overfit), or `patience=15`
-- (a) `imgsz=1920`: more pixels per tiny object. Check that autobatch still fits in 12 GB VRAM;
-  run `--smoke` first.
-- (b) P2 head (stride 4): Ultralytics 8.4.175 ships `yolov8-p2.yaml` and `yolo26-p2.yaml`, but no
-  `yolo11-p2.yaml`. Write `configs/models/yolo11-p2.yaml` (yolo11 backbone + P2 head as in
-  yolov8-p2) and train with `pretrained=yolo11s.pt`, so only the head differs from the baseline.
-  Whether the weights load as expected (backbone and neck where shapes match) is not verified yet.
-- (c) SAHI with upscaled tiles on the existing baseline weights (no training):
-  `infer_video.py --sahi --slice 320` (tiles are fed at imgsz 1280, i.e. 4×). Only 8 frames/s.
-- metrics to compare against: the baseline row in the README and the video tracking write-up
-  (drones P/R 0.82 / 0.82, MOTA 0.64, IDF1 0.79 at IoU 0.5). Also report the size-bias table.
+**Per experiment:** train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py` on the
+45 test videos, a write-up in `docs/experiments/`, a row in the README results table, and the
+size-bias table. Reference: `baseline7` (drones on video P/R 0.89 / 0.91, MOTA 0.77, IDF1 0.83).
+Later options: training at imgsz 1920 (inference-only scaling gave no gain, see step 2), SAHI for
+footage larger than 640×512.
 
 **Commands to reproduce the current numbers** (outputs in `runs/`, which is not committed):
 
 ```bash
-# 44 test videos -> runs/infer/baseline_test (each video is <stem>.mp4 in Video_V/)
+# 44 old test videos -> runs/infer/baseline_test (each video is <stem>.mp4 in Video_V/);
+# for baseline7 use data/splits/split_manifest.csv (45 videos) and its weights
 V=data/raw/halmstad/DroneDetectionThesis-Drone-detection-dataset-e7a6eaf/Data/Video_V
-SRC=$(grep ",test," data/splits/split_manifest.csv | cut -d, -f1 | sed "s#halmstad_\(.*\)#$V/\1.mp4#")
+SRC=$(grep ",test," data/splits_5class_2026-10-11/split_manifest.csv | cut -d, -f1 | sed "s#halmstad_\(.*\)#$V/\1.mp4#")
 python scripts/infer_video.py --weights runs/detect/baseline/weights/best.pt --source $SRC \
     --output runs/infer/baseline_test --no-video
 python scripts/evaluate_video.py --pred runs/infer/baseline_test            # IoU 0.5
@@ -296,6 +297,9 @@ Next:
   carry a tag now), so they stay in their clip's split. Rejected: training without background, and
   waiting for another dataset. Known limit: crops may contain unlabeled objects, as full frames do.
 - 2026-10-15: `configs/train.yaml` defaults to 40 epochs (the 100-epoch baseline peaked at 29).
+- 2026-10-15 (user): publish as public GitHub repo `fpv-drone-detect` under AGPL-3.0 (matches
+  Ultralytics). README showcase GIF committed in `docs/media/` as the only media exception; the
+  full MP4 (`scripts/make_showcase.py`, CC0 Halmstad test clips) is attached to release v0.1.0.
 - 2026-10-11 (user): experiment order: class migration + new baseline (40 epochs, imgsz 1280), a
   resolution test with no training on the old weights, then a P2 head (own `yolo11-p2` config);
   imgsz 1920 only if the resolution test shows a clear gain.

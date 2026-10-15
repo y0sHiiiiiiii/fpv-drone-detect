@@ -110,6 +110,28 @@ def test_sample_split_is_random_and_deterministic(tmp_path: Path) -> None:
     assert a != [f"/d/images/c{i:03d}_f000000.jpg" for i in range(20)]  # not just a prefix
 
 
+def test_resolve_model_paths() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("train_script", SCRIPT)
+    train = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(train)
+
+    # our own YAMLs resolve against the repo root; built-in names stay for Ultralytics
+    p2 = train.resolve_model("configs/models/yolo11s-p2.yaml")
+    assert Path(p2) == REPO_ROOT / "configs" / "models" / "yolo11s-p2.yaml"
+    assert train.resolve_model("yolo11s.yaml") == "yolo11s.yaml"
+    assert Path(train.resolve_model("runs/x/best.pt")) == REPO_ROOT / "runs" / "x" / "best.pt"
+
+
+def test_p2_config_builds_with_four_detection_scales() -> None:
+    from ultralytics.nn.tasks import DetectionModel
+
+    model = DetectionModel(str(REPO_ROOT / "configs" / "models" / "yolo11s-p2.yaml"), nc=7)
+    assert model.yaml["scale"] == "s"
+    assert model.stride.tolist() == [4.0, 8.0, 16.0, 32.0]
+
+
 def test_missing_splits_fail_early(tmp_path: Path) -> None:
     data_yaml = tmp_path / "dataset.yaml"
     data_yaml.write_text(

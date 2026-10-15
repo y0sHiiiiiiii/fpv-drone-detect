@@ -7,6 +7,8 @@ Examples:
     python scripts/train.py --name baseline
     python scripts/train.py --smoke
     python scripts/train.py --set epochs=50 imgsz=960 model=yolo11m.pt --name m960
+    python scripts/train.py --set model=configs/models/yolo11s-p2.yaml pretrained=yolo11s.pt \
+        epochs=25 --name p2
     python scripts/train.py --resume runs/detect/baseline
 """
 
@@ -64,7 +66,13 @@ def resolve_training_dataset(dataset_yaml: Path, smoke: bool) -> tuple[Path, dic
 
 
 def resolve_model(model: str) -> str:
-    """Keep pretrained weights in runs/weights/ instead of the working directory."""
+    """Keep pretrained weights in runs/weights/ instead of the working directory.
+
+    A bare ``.pt`` name is downloaded to runs/weights/; other ``.pt`` paths and model YAMLs with
+    a directory part resolve against the repo root. A bare YAML name (``yolo11s.yaml``) stays as
+    is, so Ultralytics finds its built-in config. For our own YAMLs the path may name a scale
+    that has no file of its own (``configs/models/yolo11s-p2.yaml`` loads ``yolo11-p2.yaml``).
+    """
     path = Path(model)
     if path.suffix == ".pt" and not path.is_absolute() and len(path.parts) == 1:
         if (REPO_ROOT / path).exists():
@@ -73,7 +81,9 @@ def resolve_model(model: str) -> str:
 
         WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
         return str(attempt_download_asset(WEIGHTS_DIR / path.name))
-    return str(resolve_path(model)) if path.suffix == ".pt" else model
+    if path.suffix == ".pt" or (path.suffix in (".yaml", ".yml") and len(path.parts) > 1):
+        return str(resolve_path(model))
+    return model
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -144,6 +154,9 @@ def main(argv: list[str] | None = None) -> int:
 
     model_name = cfg.pop("model", "yolo11s.pt")
     model = YOLO(resolve_model(model_name))
+    if isinstance(cfg.get("pretrained"), str) and cfg["pretrained"].endswith(".pt"):
+        # weights to transfer into a model built from YAML (matching layers only)
+        cfg["pretrained"] = resolve_model(cfg["pretrained"])
     run_info: dict[str, Any] = {
         "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "argv": sys.argv[1:] if argv is None else argv,
