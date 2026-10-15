@@ -1,124 +1,111 @@
 <div align="center">
 
-# fpv-drone-detect
+# TrenchView · fpv-drone-detect
 
-**Every drone that reaches a trench was a dot in the sky first.**<br>
-Detecting, classifying and tracking small aerial objects in recorded video.
+### Airspace awareness for the age of drone warfare.
 
 [![CI](https://github.com/y0sHiiiiiiii/fpv-drone-detect/actions/workflows/ci.yml/badge.svg)](https://github.com/y0sHiiiiiiii/fpv-drone-detect/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Ultralytics YOLO11](https://img.shields.io/badge/Ultralytics-YOLO11-111F68.svg)](https://docs.ultralytics.com/)
-![Status: research prototype](https://img.shields.io/badge/status-research%20prototype-orange.svg)
+![Release: v0.1 research preview](https://img.shields.io/badge/release-v0.1%20research%20preview-orange.svg)
 
 <img src="docs/media/showcase.gif" width="760" alt="Detections and track IDs on held-out test clips: two drones, a drone against clouds, birds, a helicopter">
 
-<sub>Held-out test footage the model never saw during training ·
+<sub>fpv-drone-detect v0.1 on held-out test footage the model never saw during training ·
 full 720p video: <a href="https://github.com/y0sHiiiiiiii/fpv-drone-detect/releases/download/v0.1.0/showcase.mp4">showcase.mp4</a></sub>
 
 </div>
 
 ---
 
-## Situation
+## The sky has changed
 
-Since 2022, the war in Ukraine has made the small FPV drone one of the defining weapons of
-modern warfare. A few hundred dollars of plastic, motors and a camera now does work that used to
-need artillery. Both sides build them by the hundreds of thousands, and the front line has
-become a strip of land where anything that moves in the open is watched from above.
+War now runs on drones that cost a few hundred dollars. Since 2022, FPV drones have gone from
+hobby gear to one of the defining systems on the battlefield, built by the hundreds of thousands
+and flown by the thousands every day. The airspace above a modern front line is crowded, cheap
+and fast.
 
-It is also one of the most filmed wars in history. Strikes, interceptions and near misses are
-recorded from drone cameras, phones and trenches, and then uploaded. That adds up to thousands of
-hours of footage. In almost every frame the most important object is tiny: a dark speck of 15 to
-30 pixels against a grey sky, a tree line or a cloud, and a second later it is gone.
+The result is an ocean of video. Every flight is recorded, and almost every recording contains
+the same hard problem: the object that matters is a 15–30 pixel speck in front of sky, trees or
+cloud, and it is in the frame for seconds. People cannot watch every frame, so machines have to.
 
-Anyone who wants to understand this footage has to answer one question frame by frame first:
-**is that dot a drone?** That goes for researchers, journalists and analysts, and for the people
-building tomorrow's airspace protection.
+**TrenchView builds the perception layer for this new airspace: software that finds,
+classifies and follows small aerial objects in video, reliably, measurably, and in the open.**
 
-## Mission
+## The product: fpv-drone-detect
 
-`fpv-drone-detect` answers that question for recorded video:
-
-1. **Find** every aerial object in every frame, down to a few pixels in size.
-2. **Classify** it: drone or bird, airplane or helicopter.
-3. **Follow** it through the clip with a stable track ID.
-4. **Report** it as an annotated video and a per-frame JSON log for analysis.
-
-Everything runs offline on recorded files. The pipeline never touches a live feed, a camera or a
-drone.
-
-## Order of battle
-
-| Asset | Role |
-|---|---|
-| **YOLO11** (Ultralytics) | the detector, fine-tuned at 1280 px input so that a 20 px drone still has pixels to work with |
-| **Stride-4 detection head** (`yolo11-p2`) | a custom head for the smallest targets in the sky, currently in training |
-| **ByteTrack / BoT-SORT** | turns detections into tracks: one object, one ID, start to finish |
-| **SAHI** | slices large frames into tiles for footage beyond 640 × 512 |
-| **Containment suppression** | removes the second, oversized box that small objects tend to get |
-| **7 airframe classes** | `multirotor`, `fixed_wing`, `vtol`, `bird`, `unknown_aerial`, `airplane`, `helicopter` |
-
-Birds, airplanes and helicopters are classes of their own. The model has to learn what a drone is
-*not*, or it reports every crow and every airliner as a threat.
-
-## Intel: results so far
-
-The model was trained on the public Halmstad drone detection dataset: 197 videos for training,
-scored on 45 videos it never saw. The footage comes from static ground cameras, shows mostly sky,
-and most drones in it are smaller than 32 × 32 px.
+`fpv-drone-detect` is our open core. It turns raw video into structured airspace intelligence:
 
 | | |
 |---|---|
-| detection, test split (mAP@0.5) | **0.847** |
-| drones on video, precision / recall | **0.89 / 0.91** |
-| drone tracking (MOTA / IDF1) | **0.77 / 0.83** |
-| airplanes or helicopters tracked as a drone | **0** on all held-out aircraft clips |
+| **Detect** | finds aerial objects down to a few pixels across, in every frame |
+| **Classify** | multirotor, fixed-wing, VTOL, bird, airplane, helicopter, unknown |
+| **Track** | one object, one ID, from first frame to last (ByteTrack / BoT-SORT) |
+| **Report** | annotated video plus a per-frame JSON log that drops straight into an analysis pipeline |
+| **Measure** | every model ships with mAP, per-class precision/recall, size-binned metrics and MOTA/IDF1 on video |
 
-What still goes wrong is documented just as carefully:
-- On the smallest drones, the boxes come out too large.
-- Airliners are sometimes taken for helicopters.
-- Specks of dirt on a lens were reported as birds.
-- Upscaling the input at inference time made things *worse*, and the write-up says so.
+Under the hood: YOLO11 fine-tuned at 1280 px, a custom stride-4 detection head for the smallest
+targets, SAHI tiling for high-resolution footage, and suppression of the oversized second
+boxes that small objects attract.
 
-Every run, including the failures, is in [`docs/experiments/`](docs/experiments/).
+**Built to tell drones from everything else.** Birds, airliners and helicopters are first-class
+classes, not afterthoughts. A system that calls every crow a threat is a system nobody trusts.
 
-**The honest caveat:** this is still a ground camera in Sweden, not footage from the front. Shaky
-FPV video, motion blur, smoke and ground clutter are the next battlefield for this model, and it
-has not fought there yet.
+## Performance
 
-## Rules of engagement
+v0.1, benchmarked on 45 held-out videos that the model never saw in training:
 
-This project watches. It does not act.
+| Metric | v0.1 |
+|---|---|
+| Detection accuracy (mAP@0.5) | **0.847** |
+| Drone precision / recall on video | **0.89 / 0.91** |
+| Drone tracking (MOTA / IDF1) | **0.77 / 0.83** |
+| Airplanes or helicopters mistaken for a drone | **0** across all held-out aircraft clips |
 
-- **Offline only:** recorded video in, annotations out. No live feeds, no on-board or real-time
+We publish what does not work yet, too: boxes on the very smallest drones are too large,
+airliners are sometimes confused with helicopters, and upscaling at inference time made results
+worse. Every experiment, good or bad, is written up in [`docs/experiments/`](docs/experiments/).
+
+*v0.1 is trained on the public Halmstad dataset, static ground cameras in Sweden. It has not yet
+seen front-line FPV footage, and the numbers above should not be read as if it had.*
+
+## Principles
+
+**We build eyes, not weapons.** Our software analyses recorded video. That is a deliberate
+product decision, not a limitation we plan to remove:
+
+- **Offline by design.** Recorded video in, annotations out. No live feeds, no on-board
   deployment.
-- **No hardware:** no cameras, flight controllers, gimbals, sensors or MAVLink.
-- **No targeting:** no control, guidance, interception or any other actuation logic.
-- **No attribution:** no identification of specific military models, manufacturers or units, and
-  no geolocation of footage or people.
-- **Data with care:** only public research datasets, no scrapers, and no footage showing
+- **No hardware integration.** No cameras, flight controllers, gimbals, sensors or MAVLink.
+- **No targeting.** No control, guidance, interception or actuation logic, ever.
+- **No attribution.** We do not identify specific military models, manufacturers or units, and
+  we do not geolocate footage or people.
+- **Clean data.** Public research datasets with clear licenses. No scraping, and no footage of
   identifiable people or casualties.
 
-Pull requests that cross these lines will be closed.
+Contributions that cross these lines are declined.
 
-## Field manual
+## What's next
 
-[docs/GUIDE.md](docs/GUIDE.md) covers everything needed to run the pipeline:
-- setup and data preparation
-- training and evaluation
-- video inference
-- detailed results
-- the repository layout
+- **v0.2: small-target head.** The stride-4 detection head is in training and aims at the size
+  bias on the smallest drones.
+- **Real-world footage.** An FPV test set with motion blur, ground clutter and moving cameras.
+- **More data.** Additional public datasets beyond Halmstad.
 
-Plans and decisions are in [ROADMAP.md](ROADMAP.md). How to contribute is in
+The detailed plan is in [ROADMAP.md](ROADMAP.md).
+
+## Get started
+
+Installation, data preparation, training, evaluation, video inference and the full results
+tables are in the **[Developer guide](docs/GUIDE.md)**. To contribute, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Citation
 
-If this project is useful for your work, please cite it (see [CITATION.cff](CITATION.cff)). Please
-also cite the dataset it was trained on: F. Svanström, F. Alonso-Fernandez, C. Englund, "A dataset
-for multi-sensor drone detection", *Data in Brief* 39 (2021), doi:10.1016/j.dib.2021.107521.
+If fpv-drone-detect is useful for your work, please cite it (see [CITATION.cff](CITATION.cff)) and
+the dataset it was trained on: F. Svanström, F. Alonso-Fernandez, C. Englund, "A dataset for
+multi-sensor drone detection", *Data in Brief* 39 (2021), doi:10.1016/j.dib.2021.107521.
 
 ## License
 

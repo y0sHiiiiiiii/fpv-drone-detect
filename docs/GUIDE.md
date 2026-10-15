@@ -1,4 +1,4 @@
-# fpv-drone-detect · Field manual
+# fpv-drone-detect · Developer guide
 
 Everything you need to run the pipeline yourself: setup, data preparation, training,
 evaluation, video inference, results and the repository layout. Back to the
