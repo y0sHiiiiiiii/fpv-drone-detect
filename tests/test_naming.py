@@ -16,12 +16,22 @@ def test_frame_index_is_zero_padded() -> None:
     assert frame_filename("v", 1234567, ".png") == "v_f1234567.png"
 
 
+def test_tagged_name_keeps_video_id() -> None:
+    name = frame_filename("halmstad_V_DRONE_001", 12, tag="bg")
+    assert name == "halmstad_V_DRONE_001_f000012_bg.jpg"
+    assert parse_frame_name(name) == ("halmstad_V_DRONE_001", 12)
+    with pytest.raises(ValueError):
+        frame_filename("v", 1, tag="no_underscores")
+
+
 def test_negative_index_rejected() -> None:
     with pytest.raises(ValueError):
         frame_filename("v", -1)
 
 
-@pytest.mark.parametrize("name", ["frame_0001.jpg", "clip_f12.jpg", "_f000001.jpg", "clip.jpg"])
+@pytest.mark.parametrize(
+    "name", ["frame_0001.jpg", "clip_f12.jpg", "_f000001.jpg", "clip.jpg", "clip_f000001_.jpg"]
+)
 def test_non_conforming_names_rejected(name: str) -> None:
     with pytest.raises(ValueError):
         video_id_from_frame(name)

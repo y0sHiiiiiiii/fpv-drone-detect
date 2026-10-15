@@ -15,6 +15,8 @@ CLASS_COLORS: tuple[tuple[int, int, int], ...] = (
     (40, 200, 230),  # vtol
     (80, 200, 80),  # bird
     (200, 80, 200),  # unknown_aerial
+    (200, 200, 60),  # airplane
+    (40, 120, 240),  # helicopter
 )
 
 

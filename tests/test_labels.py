@@ -32,7 +32,7 @@ def test_parse_valid_line() -> None:
         "0 0.5 0.5 0.1",  # too few columns
         "0 0.5 0.5 0.1 0.1 0.9",  # too many (segmentation/confidence)
         "a 0.5 0.5 0.1 0.1",  # non-numeric class
-        "5 0.5 0.5 0.1 0.1",  # class id out of range
+        "7 0.5 0.5 0.1 0.1",  # class id out of range
         "-1 0.5 0.5 0.1 0.1",
         "0 1.2 0.5 0.1 0.1",  # center outside image
         "0 0.5 0.5 0.0 0.1",  # zero width

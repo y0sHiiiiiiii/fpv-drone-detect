@@ -7,11 +7,16 @@ name: halmstad
 class_map:
   drone: multirotor
   bird: bird
-  airplane: null
-  helicopter: null
+  airplane: airplane
+  helicopter: helicopter
 
 options:
   modalities: [visible] # visible | ir
-  # Airplane/helicopter clips only yield background frames. Sampling them at 1.5 fps instead of
-  # 5 fps keeps the background share around 18 % (at 5 fps it would be ~45 %).
-  negative_fps: 1.5
+  # Every clip has a labeled object in (almost) every frame, so background images are cut from
+  # the frames: every `every`-th sampled frame gets one crop that keeps `margin` px away from all
+  # labeled boxes. `sizes` are crop sides as a fraction of the frame, tried in this order. The
+  # crops keep their clip's video id and so stay in its split. every=6 gives ~12 % background.
+  background_crops:
+    every: 6
+    sizes: [0.7, 0.6, 0.5]
+    margin: 16

@@ -1,7 +1,8 @@
 """Convert the Halmstad drone detection dataset to YOLO frames + labels in data/labeled/.
 
 Output: images/halmstad/<video_id>/<video_id>_fNNNNNN.jpg with mirrored labels/, where
-video_id is ``halmstad_<original stem>`` (e.g. halmstad_V_DRONE_001).
+video_id is ``halmstad_<original stem>`` (e.g. halmstad_V_DRONE_001). Background crops
+(options.background_crops) are written next to them as <video_id>_fNNNNNN_bg.jpg.
 """
 
 import argparse
@@ -44,6 +45,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "else --fps); keeps the background share in the 10-20 %% range",
     )
     parser.add_argument(
+        "--bg-every",
+        type=int,
+        default=None,
+        help="one background crop every N sampled frames (default: "
+        "options.background_crops.every; 0 = no crops)",
+    )
+    parser.add_argument(
         "--modality",
         choices=[*MODALITIES, "both"],
         default=None,
@@ -84,6 +92,14 @@ def main(argv: list[str] | None = None) -> int:
         log.error("--fps and --negative-fps must be >= 0")
         return 1
 
+    bg_options = dict(config.options.get("background_crops") or {})
+    bg_every = args.bg_every if args.bg_every is not None else int(bg_options.get("every", 0))
+    bg_sizes = [float(s) for s in bg_options.get("sizes", [0.7, 0.6, 0.5])]
+    bg_margin = float(bg_options.get("margin", 16))
+    if bg_every < 0:
+        log.error("--bg-every must be >= 0")
+        return 1
+
     clips = find_clips(args.input, [MODALITIES[m] for m in names])
     if args.limit:
         clips = clips[: args.limit]
@@ -110,7 +126,16 @@ def main(argv: list[str] | None = None) -> int:
                 fps = (negative_fps if negative else args.fps) or None
                 frames = load_labels(clip)
                 clip_stats = convert_clip(
-                    clip, frames, config.map_class, images_root, labels_root, fps, args.quality
+                    clip,
+                    frames,
+                    config.map_class,
+                    images_root,
+                    labels_root,
+                    fps,
+                    args.quality,
+                    bg_every=bg_every,
+                    bg_sizes=bg_sizes,
+                    bg_margin=bg_margin,
                 )
             except (HalmstadError, MatParseError, KeyError, OSError, ValueError) as exc:
                 log.error("%s: %s", clip.video.name, exc)
@@ -133,6 +158,16 @@ def main(argv: list[str] | None = None) -> int:
         boxes or "-",
         stats["dropped"],
     )
+    if bg_every:
+        images = stats["frames"] + stats["bg_crops"]
+        log.info(
+            "background crops: %d written, %d frames without room for one | background share "
+            "%.1f %% of %d images",
+            stats["bg_crops"],
+            stats["bg_crop_failed"],
+            100 * (stats["background"] + stats["bg_crops"]) / max(images, 1),
+            images,
+        )
     if failed:
         log.warning("failed clips: %s", ", ".join(failed))
     return 1 if failed else 0

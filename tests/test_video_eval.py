@@ -11,7 +11,15 @@ from fpvdd.video_eval import (
     summarize,
 )
 
-NAMES = ["multirotor", "fixed_wing", "vtol", "bird", "unknown_aerial"]
+NAMES = [
+    "multirotor",
+    "fixed_wing",
+    "vtol",
+    "bird",
+    "unknown_aerial",
+    "airplane",
+    "helicopter",
+]
 DRONE = (100.0, 100.0, 120.0, 120.0)
 NEAR = (101.0, 101.0, 121.0, 121.0)  # IoU ~0.82 with DRONE
 FAR = (300.0, 300.0, 320.0, 320.0)
@@ -199,7 +207,7 @@ def test_cli_end_to_end(tmp_path, monkeypatch) -> None:
     assert (drone_m["tp"], drone_m["fn"]) == (3, 1)
     assert drone_m["identity"]["idsw"] == 1
     plane_m = results["groups"]["AIRPLANE"]["metrics"]
-    assert plane_m["fp_by_kind"]["other_object"] == 4
+    assert plane_m["fp_by_kind"]["wrong_class"] == 4  # airplane is a class of its own now
     assert plane_m["identity"]["false_tracks"] == 1
     report = (pred / "video_eval" / "report.md").read_text(encoding="utf-8")
     assert "training or validation split" in report

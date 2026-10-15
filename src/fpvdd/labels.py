@@ -4,7 +4,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-CLASS_NAMES: tuple[str, ...] = ("multirotor", "fixed_wing", "vtol", "bird", "unknown_aerial")
+CLASS_NAMES: tuple[str, ...] = (
+    "multirotor",
+    "fixed_wing",
+    "vtol",
+    "bird",
+    "unknown_aerial",
+    "airplane",
+    "helicopter",
+)
 NUM_CLASSES = len(CLASS_NAMES)
 
 

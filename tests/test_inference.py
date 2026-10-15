@@ -21,7 +21,15 @@ from fpvdd.inference import (
 from fpvdd.paths import REPO_ROOT
 from fpvdd.video import open_writer, probe, transcode_h264
 
-NAMES = ["multirotor", "fixed_wing", "vtol", "bird", "unknown_aerial"]
+NAMES = [
+    "multirotor",
+    "fixed_wing",
+    "vtol",
+    "bird",
+    "unknown_aerial",
+    "airplane",
+    "helicopter",
+]
 SCRIPT = REPO_ROOT / "scripts" / "infer_video.py"
 LOCAL_WEIGHTS = REPO_ROOT / "runs" / "weights" / "yolo11s.pt"
 

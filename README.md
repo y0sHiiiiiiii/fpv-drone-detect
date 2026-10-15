@@ -18,11 +18,11 @@ specific military models or units, and geolocation. See `CLAUDE.md`.
 | 2 | `vtol` | hybrids with rotors and wings |
 | 3 | `bird` | negative class against false positives |
 | 4 | `unknown_aerial` | aerial object, not clearly assignable |
-| 5 | `airplane` | manned fixed-wing aircraft (planned) |
-| 6 | `helicopter` | manned rotorcraft with a main rotor (planned) |
+| 5 | `airplane` | manned fixed-wing aircraft |
+| 6 | `helicopter` | manned rotorcraft with a main rotor |
 
-Classes 5 and 6 were decided on 2026-10-11 but are not implemented yet: configs, code, data and
-all trained models still use classes 0–4. See [ROADMAP.md](ROADMAP.md), "Next session".
+Classes 5 and 6 exist since 2026-10-15. Models trained before that (`baseline`) know only
+classes 0–4.
 
 ## Setup
 
@@ -75,19 +75,24 @@ python scripts/visualize_labels.py --subdir halmstad --class bird   # check boxe
 python scripts/split_dataset.py
 ```
 
-The class mapping lives in `configs/sources/halmstad.yaml`: drone → `multirotor`, bird → `bird`.
-Airplane and helicopter boxes are dropped and their frames are kept as negatives, sampled at
-`negative_fps` to keep the background share in range. The MATLAB `groundTruth` label files are
-read by `fpvdd.matlab_gt`, a small MAT5 parser that handles any number of boxes per frame.
-Result with the defaults: 285 clips → 10,610 frames, 6,098 multirotor and 3,652 bird boxes,
-about 18 % background. Planned: airplane → `airplane` and helicopter → `helicopter` instead of
-dropping them (see Classes).
+The class mapping lives in `configs/sources/halmstad.yaml`: drone → `multirotor`, bird → `bird`,
+airplane → `airplane`, helicopter → `helicopter`. The MATLAB `groundTruth` label files are read by
+`fpvdd.matlab_gt`, a small MAT5 parser that handles any number of boxes per frame.
+
+Almost every Halmstad frame contains a labeled object, so background images are cut from the
+frames (`options.background_crops`): every 6th sampled frame yields one crop of 70, 60 or 50 % of
+the frame side that keeps 16 px away from all labeled boxes. Crops are named
+`<video_id>_fNNNNNN_bg.jpg` and keep their clip's video id, so they stay in its split.
+`--bg-every 0` turns them off.
+
+Result with the defaults: 285 clips → 14,984 frames plus 2,029 background crops (12.0 %
+background); 6,098 multirotor, 3,652 bird, 3,121 airplane and 3,288 helicopter boxes.
 
 ## Training and evaluation
 
 ```bash
 python scripts/train.py --smoke                 # 1 epoch on 5 % of the data, checks the setup
-python scripts/train.py --name baseline         # configs/train.yaml: yolo11s, imgsz 1280, 100 epochs
+python scripts/train.py --name baseline7        # configs/train.yaml: yolo11s, imgsz 1280, 40 epochs
 python scripts/train.py --set epochs=50 model=yolo11m.pt --name m50   # any Ultralytics override
 python scripts/train.py --resume runs/detect/baseline   # continue an interrupted run
 ```

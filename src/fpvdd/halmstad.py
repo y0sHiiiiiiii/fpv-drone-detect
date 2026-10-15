@@ -9,6 +9,8 @@ DRONE, HELICOPTER), with any number of ``[x, y, w, h]`` boxes in MATLAB pixel co
 """
 
 import logging
+import math
+import random
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -124,6 +126,55 @@ def frame_boxes(
     return boxes, dropped
 
 
+def background_crop(
+    obstacles: Sequence[PixelBox],
+    img_w: int,
+    img_h: int,
+    sizes: Sequence[float],
+    margin: float,
+    rng: random.Random,
+    tries: int = 50,
+) -> tuple[int, int, int, int] | None:
+    """Pick a crop ``(x, y, w, h)`` that stays ``margin`` px away from every obstacle box.
+
+    ``obstacles`` are 0-based ``x, y, w, h`` pixel boxes. ``sizes`` are crop sides as a
+    fraction of the image side, tried in order. Candidates per size are ``tries`` random
+    positions plus the positions flush with the image border or an obstacle's margin, so a
+    narrow free strip (e.g. beside a centred object) is still found. One valid candidate is
+    picked at random. Returns None if no size fits.
+    """
+
+    def free(cx: int, cy: int, cw: int, ch: int) -> bool:
+        return not any(
+            cx < x + w + margin
+            and cx + cw > x - margin
+            and cy < y + h + margin
+            and cy + ch > y - margin
+            for x, y, w, h in obstacles
+        )
+
+    for size in sizes:
+        cw, ch = round(img_w * size), round(img_h * size)
+        if not (0 < cw <= img_w and 0 < ch <= img_h):
+            raise ValueError(f"crop size {size} out of range (0, 1]")
+        xs = {0, img_w - cw}
+        ys = {0, img_h - ch}
+        for x, y, w, h in obstacles:
+            xs.update((math.ceil(x + w + margin), math.floor(x - margin) - cw))
+            ys.update((math.ceil(y + h + margin), math.floor(y - margin) - ch))
+        xs = {v for v in xs if 0 <= v <= img_w - cw}
+        ys = {v for v in ys if 0 <= v <= img_h - ch}
+        candidates = [(cx, cy) for cx in sorted(xs) for cy in sorted(ys)]
+        candidates += [
+            (rng.randint(0, img_w - cw), rng.randint(0, img_h - ch)) for _ in range(tries)
+        ]
+        valid = [(cx, cy) for cx, cy in candidates if free(cx, cy, cw, ch)]
+        if valid:
+            cx, cy = rng.choice(valid)
+            return cx, cy, cw, ch
+    return None
+
+
 def video_ground_truth(
     frames: Sequence[FrameLabels], map_class: Callable[[str], int | None]
 ) -> tuple[dict[int, list[GTBox]], bool]:
@@ -160,12 +211,18 @@ def convert_clip(
     labels_root: Path,
     target_fps: float | None,
     jpeg_quality: int = 95,
+    bg_every: int = 0,
+    bg_sizes: Sequence[float] = (0.7, 0.6, 0.5),
+    bg_margin: float = 16.0,
 ) -> Counter[str]:
     """Write sampled frames and YOLO labels for one clip; return counters.
 
     Boxes whose label maps to None are dropped, but their frames are still written (with the
     remaining boxes, possibly none), so objects outside our class schema become negatives.
-    Counters: ``frames``, ``background``, ``dropped`` and ``box:<class name>``.
+    With ``bg_every`` > 0, every ``bg_every``-th sampled frame also yields one background crop
+    away from all labeled boxes (see `background_crop`), saved as ``<frame name>_bg`` with an
+    empty label file. Counters: ``frames``, ``background`` (frames without boxes), ``dropped``,
+    ``bg_crops``, ``bg_crop_failed`` and ``box:<class name>``.
     """
     info = probe(clip.video)
     validate_labels(frames, info.frame_count, info.width, info.height)
@@ -174,8 +231,8 @@ def convert_clip(
     image_dir.mkdir(parents=True, exist_ok=True)
 
     stats: Counter[str] = Counter()
-    for idx, _ts, frame in tqdm(
-        iter_frames(clip.video, target_fps), desc=clip.video_id, unit="frame", leave=False
+    for sample, (idx, _ts, frame) in enumerate(
+        tqdm(iter_frames(clip.video, target_fps), desc=clip.video_id, unit="frame", leave=False)
     ):
         if idx >= len(frames):
             raise HalmstadError(f"decoded more frames than the container reports ({idx + 1})")
@@ -188,4 +245,18 @@ def convert_clip(
         stats["background"] += not boxes
         stats["dropped"] += dropped
         stats.update(f"box:{b.class_name}" for b in boxes)
+        if bg_every > 0 and sample % bg_every == bg_every // 2:
+            obstacles = [
+                matlab_to_pixels(b) for pixel_boxes in frames[idx].values() for b in pixel_boxes
+            ]
+            rng = random.Random(f"{clip.video_id}:{idx}")  # deterministic per frame
+            crop = background_crop(obstacles, w, h, bg_sizes, bg_margin, rng)
+            if crop is None:
+                stats["bg_crop_failed"] += 1
+                continue
+            x, y, cw, ch = crop
+            bg_name = frame_filename(clip.video_id, idx, tag="bg")
+            write_image(image_dir / bg_name, frame[y : y + ch, x : x + cw], jpeg_quality)
+            write_label_file((label_dir / bg_name).with_suffix(".txt"), [])
+            stats["bg_crops"] += 1
     return stats
