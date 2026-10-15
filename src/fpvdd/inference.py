@@ -65,7 +65,7 @@ def detections_from_tracks(tracks: np.ndarray) -> list[Detection]:
 def frame_record(
     frame: int, timestamp_s: float, detections: Iterable[Detection], names: Sequence[str]
 ) -> dict[str, Any]:
-    """One entry of ``<name>_detections.json`` (format documented in the README)."""
+    """One entry of ``<name>_detections.json`` (format documented in docs/GUIDE.md)."""
     return {
         "frame": frame,
         "timestamp_s": round(timestamp_s, 4),

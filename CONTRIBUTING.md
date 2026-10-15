@@ -42,5 +42,5 @@ ruff check . && ruff format --check .
 ## Experiments
 
 New experiments get a write-up in `docs/experiments/` (setup, exact commands, results, findings,
-limits) and, if they change the reference numbers, a row in the README results table. Results
+limits) and, if they change the reference numbers, a row in the results table in `docs/GUIDE.md`. Results
 that do not help are just as worth writing up.

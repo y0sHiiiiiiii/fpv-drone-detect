@@ -1,7 +1,7 @@
 # Roadmap
 
 Working plan for fpv-drone-detect. Update the status, decisions and open questions here whenever a
-phase changes. The scope rules ("Responsible use" in the README) apply to every phase.
+phase changes. The scope rules ("Rules of engagement" in the README) apply to every phase.
 
 Status: ✅ done · 🚧 in progress · ⏳ planned
 
@@ -61,7 +61,7 @@ Halmstad was reconverted and resplit:
    `runs/p2_train.log`. Then compare against `baseline7` (test, video, size bias).
 
 **Per experiment:** train, `evaluate.py` on test, `infer_video.py` + `evaluate_video.py` on the
-45 test videos, a write-up in `docs/experiments/`, a row in the README results table, and the
+45 test videos, a write-up in `docs/experiments/`, a row in the results table in `docs/GUIDE.md`, and the
 size-bias table. Reference: `baseline7` (drones on video P/R 0.89 / 0.91, MOTA 0.77, IDF1 0.83).
 Later options: training at imgsz 1920 (inference-only scaling gave no gain, see step 2), SAHI for
 footage larger than 640×512.
@@ -182,7 +182,7 @@ Delivered:
 - provenance checks: split leakage, dataset fingerprint vs. the training run, unfinished training
 - verified: COCO and Ultralytics mAP agree (0.771 vs 0.767 mAP50 on a dev subset)
 
-Baseline on `test` (1,615 frames; table in the README, full write-up in
+Baseline on `test` (1,615 frames; table in `docs/GUIDE.md`, full write-up in
 [docs/experiments/2026-10-11_baseline.md](docs/experiments/2026-10-11_baseline.md)):
 - mAP@0.5 0.777, mAP@0.5:0.95 0.347; multirotor AP50 0.802, bird AP50 0.751
 - 74 % of the boxes are small (< 32² px)
@@ -200,7 +200,7 @@ Delivered:
   (`--sahi`), then an Ultralytics tracker (ByteTrack / BoT-SORT from their YAML files, or
   `--tracker none`). Both detection modes use the same tracking path.
 - outputs per video: `<name>_annotated.mp4` (H.264 via FFmpeg if available),
-  `<name>_detections.json` (format in the README), `<name>_tracks.csv`; plus `infer_run.json`
+  `<name>_detections.json` (format in `docs/GUIDE.md`), `<name>_tracks.csv`; plus `infer_run.json`
 - `src/fpvdd/inference.py`: conversions, JSON records, track summary, containment suppression;
   `draw.draw_detections`, `video.open_writer` / `transcode_h264`; tests incl. CLI end-to-end
 - defaults: NMS IoU 0.5, containment suppression `--ios 0.8`, conf 0.1 with tracker
@@ -300,6 +300,11 @@ Next:
 - 2026-10-15 (user): publish as public GitHub repo `fpv-drone-detect` under AGPL-3.0 (matches
   Ultralytics). README showcase GIF committed in `docs/media/` as the only media exception; the
   full MP4 (`scripts/make_showcase.py`, CC0 Halmstad test clips) is attached to release v0.1.0.
+- 2026-10-15 (user): git history rewritten to drop local AI assistant files, so all commit IDs
+  changed. Run records in `runs/` (`fpvdd_run.json`, `infer_run.json`) still carry the old IDs:
+  2c9e65f → 5c2c4af (baseline), 30e2f03 → 8d9c4be (video tracking runs), 6e5f228 → cb52b81
+  (baseline7), 4d344c0 → 7c4f338 (p2, plus the P2 config committed as 90f4d84). The write-ups
+  use the new IDs.
 - 2026-10-11 (user): experiment order: class migration + new baseline (40 epochs, imgsz 1280), a
   resolution test with no training on the old weights, then a P2 head (own `yolo11-p2` config);
   imgsz 1920 only if the resolution test shows a clear gain.

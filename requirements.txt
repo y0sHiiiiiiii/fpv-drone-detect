@@ -1,4 +1,4 @@
-# Install a CUDA build of torch first (see README), otherwise pip pulls the CPU build.
+# Install a CUDA build of torch first (see docs/GUIDE.md), otherwise pip pulls the CPU build.
 ultralytics>=8.3
 sahi>=0.11
 lap>=0.5.12          # ByteTrack / BoT-SORT assignment (Ultralytics would auto-install it)
