@@ -1,7 +1,7 @@
 # Roadmap
 
 Working plan for fpv-drone-detect. Update the status, decisions and open questions here whenever a
-phase changes. The scope rules ("Principles" in the README) apply to every phase.
+phase changes. The scope rules ("Scope" in CONTRIBUTING.md) apply to every phase.
 
 Status: ✅ done · 🚧 in progress · ⏳ planned
 

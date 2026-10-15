@@ -19,20 +19,6 @@ full 720p video: <a href="https://github.com/y0sHiiiiiiii/fpv-drone-detect/relea
 
 ---
 
-## The sky has changed
-
-War now runs on drones that cost a few hundred dollars. Since 2022, FPV drones have gone from
-hobby gear to one of the defining systems on the battlefield, built by the hundreds of thousands
-and flown by the thousands every day. The airspace above a modern front line is crowded, cheap
-and fast.
-
-The result is an ocean of video. Every flight is recorded, and almost every recording contains
-the same hard problem: the object that matters is a 15–30 pixel speck in front of sky, trees or
-cloud, and it is in the frame for seconds. People cannot watch every frame, so machines have to.
-
-**TrenchView builds the perception layer for this new airspace: software that finds,
-classifies and follows small aerial objects in video, reliably, measurably, and in the open.**
-
 ## The product: fpv-drone-detect
 
 `fpv-drone-detect` is our open core. It turns raw video into structured airspace intelligence:
@@ -69,22 +55,6 @@ worse. Every experiment, good or bad, is written up in [`docs/experiments/`](doc
 
 *v0.1 is trained on the public Halmstad dataset, static ground cameras in Sweden. It has not yet
 seen front-line FPV footage, and the numbers above should not be read as if it had.*
-
-## Principles
-
-**We build eyes, not weapons.** Our software analyses recorded video. That is a deliberate
-product decision, not a limitation we plan to remove:
-
-- **Offline by design.** Recorded video in, annotations out. No live feeds, no on-board
-  deployment.
-- **No hardware integration.** No cameras, flight controllers, gimbals, sensors or MAVLink.
-- **No targeting.** No control, guidance, interception or actuation logic, ever.
-- **No attribution.** We do not identify specific military models, manufacturers or units, and
-  we do not geolocate footage or people.
-- **Clean data.** Public research datasets with clear licenses. No scraping, and no footage of
-  identifiable people or casualties.
-
-Contributions that cross these lines are declined.
 
 ## What's next
 

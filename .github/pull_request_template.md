@@ -8,4 +8,4 @@
 - [ ] `ruff check . && ruff format --check .` pass
 - [ ] no data, frames, videos or weights committed (only `docs/media/` for README media)
 - [ ] README / ROADMAP updated if commands or structure changed
-- [ ] stays within scope: offline analysis of recorded video only (see "Principles" in the README)
+- [ ] stays within scope: offline analysis of recorded video only (see "Scope" in CONTRIBUTING.md)
