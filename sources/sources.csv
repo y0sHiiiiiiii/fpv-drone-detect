@@ -1,2 +1,2 @@
 url,license,date_accessed,notes
-https://github.com/DroneDetectionThesis/Drone-detection-dataset,CC0-1.0,2026-10-11,"Halmstad multi-sensor drone detection dataset (Svanström et al., Data in Brief 2021; Zenodo 10.5281/zenodo.5500576). 285 visible + 365 IR 10 s clips of drones, birds, airplanes, helicopters. Converter: scripts/convert_halmstad.py; visible only, airplane/helicopter boxes dropped."
+https://github.com/DroneDetectionThesis/Drone-detection-dataset,CC0-1.0,2026-10-11,"Halmstad multi-sensor drone detection dataset (Svanström et al., Data in Brief 2021; Zenodo 10.5281/zenodo.5500576). 285 visible + 365 IR 10 s clips of drones, birds, airplanes, helicopters. Converter: scripts/convert_halmstad.py; visible only; airplane/helicopter are classes 5/6 since 2026-10-15."

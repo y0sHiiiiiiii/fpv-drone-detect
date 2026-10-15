@@ -1,12 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # PEP 639 license string
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fpv-drone-detect"
 version = "0.1.0"
-description = "Offline detection and classification of drones in recorded FPV video with YOLO."
+description = "Offline detection, classification and tracking of small aerial objects in recorded video with YOLO."
+readme = "README.md"
+license = "AGPL-3.0-only"
 requires-python = ">=3.11"
+keywords = ["object-detection", "tracking", "yolo", "drone-detection", "small-objects"]
 dependencies = [
     "numpy",
     "opencv-python",
@@ -14,6 +17,10 @@ dependencies = [
     "scipy",
     "tqdm",
 ]
+
+[project.urls]
+Repository = "https://github.com/y0sHiiiiiiii/fpv-drone-detect"
+Experiments = "https://github.com/y0sHiiiiiiii/fpv-drone-detect/tree/main/docs/experiments"
 
 [tool.setuptools.packages.find]
 where = ["src"]

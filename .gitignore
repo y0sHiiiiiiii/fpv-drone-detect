@@ -1,4 +1,5 @@
-# Data, runs and weights: never commit
+# Data, runs and weights: never commit (README media in docs/media/ is the only exception;
+# *.mp4 stays ignored there too, the full showcase video is a release asset)
 data/
 runs/
 wandb/

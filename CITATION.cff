@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "fpv-drone-detect: detecting, classifying and tracking small aerial objects in recorded video"
+type: software
+authors:
+  - alias: y0sHiiiiiiii
+repository-code: "https://github.com/y0sHiiiiiiii/fpv-drone-detect"
+license: AGPL-3.0-only
+version: 0.1.0
+date-released: "2026-10-15"
+keywords:
+  - object detection
+  - multi-object tracking
+  - small object detection
+  - drone detection
+  - YOLO
+references:
+  - type: article
+    title: "A dataset for multi-sensor drone detection"
+    authors:
+      - family-names: Svanström
+        given-names: Fredrik
+      - family-names: Alonso-Fernandez
+        given-names: Fernando
+      - family-names: Englund
+        given-names: Cristofer
+    journal: "Data in Brief"
+    volume: 39
+    year: 2021
+    doi: "10.1016/j.dib.2021.107521"

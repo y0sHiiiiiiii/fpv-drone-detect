@@ -1,13 +1,145 @@
+<div align="center">
+
 # fpv-drone-detect
 
-Detect and classify drones in recorded FPV video with YOLO (Ultralytics). This is a learning and
-research project in video object detection, and it does purely offline analysis:
+**Detecting, classifying and tracking small aerial objects in recorded video.**<br>
+YOLO11 · ByteTrack · SAHI · strictly offline analysis
 
-video file → frame extraction → annotation → training → evaluation → inference on video →
-annotated video + JSON output.
+[![CI](https://github.com/y0sHiiiiiiii/fpv-drone-detect/actions/workflows/ci.yml/badge.svg)](https://github.com/y0sHiiiiiiii/fpv-drone-detect/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Ultralytics YOLO11](https://img.shields.io/badge/Ultralytics-YOLO11-111F68.svg)](https://docs.ultralytics.com/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![Status: research prototype](https://img.shields.io/badge/status-research%20prototype-orange.svg)
 
-Out of scope: hardware integration, control/guidance/targeting, real-time deployment, identifying
-specific military models or units, and geolocation. See `CLAUDE.md`.
+<img src="docs/media/showcase.gif" width="760" alt="Detections and track IDs on held-out Halmstad test clips: two drones, a drone against clouds, birds, a helicopter">
+
+<sub>All clips are from the held-out test split; the model never saw them during training.
+Full 720p video: <a href="https://github.com/y0sHiiiiiiii/fpv-drone-detect/releases/download/v0.1.0/showcase.mp4">showcase.mp4</a>
+· rendered with <code>scripts/make_showcase.py</code></sub>
+
+</div>
+
+---
+
+A learning and research project in video object detection. It takes recorded footage and returns
+an annotated video plus per-frame JSON with classes, confidences and track IDs. Every step from
+raw video to evaluation is a small, tested CLI script, and every experiment is written up with
+its numbers, its failures and what was learned.
+
+## Highlights
+
+- **Leak-free evaluation.** Splits are drawn by video, never by frame, stratified by class, and
+  every run records a dataset fingerprint and the git commit. `evaluate.py` checks for split
+  leakage and warns if the evaluation data differs from what the model was trained on.
+- **Not just mAP.** Per-class P/R, confusion matrix, metrics by object size, and on video MOTA,
+  IDF1, ID switches, fragmentations and false positives broken down by cause
+  (`evaluate_video.py`).
+- **Small objects.** Most drones in the test data are smaller than 32 × 32 px. Containment
+  suppression, SAHI slicing, higher input resolution and a custom YOLO11 model with a stride-4
+  detection head (`configs/models/yolo11-p2.yaml`) are tested against exactly that, with
+  results reported whether they help or not.
+- **Negatives that matter.** Birds, airplanes and helicopters are classes of their own, so the
+  model learns what a drone is *not*. On held-out video no airplane or helicopter is tracked as
+  a drone anymore.
+- **Honest write-ups.** [`docs/experiments/`](docs/experiments/) documents every run, including
+  the ones that did not help.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A[recorded video] --> B[frame extraction<br/>+ dedup]
+    B --> C[labels<br/>CVAT / public datasets]
+    C --> D[split by video<br/>stratified]
+    D --> E[train<br/>YOLO11]
+    E --> F[evaluate<br/>mAP, P/R, size bins]
+    E --> G[infer on video<br/>ByteTrack / SAHI]
+    G --> H[annotated MP4<br/>+ detections JSON]
+    G --> I[evaluate_video<br/>MOTA, IDF1, FP causes]
+```
+
+## Quick start
+
+```bash
+git clone https://github.com/y0sHiiiiiiii/fpv-drone-detect && cd fpv-drone-detect
+python -m venv .venv && source .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126   # or /cpu
+pip install -r requirements.txt -r requirements-dev.txt
+
+# detect + track in your own recording (weights: train your own, see below)
+python scripts/infer_video.py --weights best.pt --source my_clip.mp4 --output out/
+```
+
+Output: `out/my_clip_annotated.mp4`, `out/my_clip_detections.json` (per frame: track ID, class,
+confidence, box) and `out/my_clip_tracks.csv`. Trained weights are not distributed. Train them
+on the public Halmstad dataset with the commands below (~3.6 h on an RTX 4070 SUPER).
+
+## Responsible use
+
+This project analyses **recorded** footage for research and learning. It deliberately contains
+no hardware integration, no real-time or on-board deployment, no control, guidance or targeting
+logic, no identification of specific military models or units, and no geolocation. Pull requests
+in those directions will not be accepted. The classes describe general airframe shape only.
+
+## Results
+
+Halmstad is a static ground camera filming against mostly sky backgrounds, so these numbers say
+little about FPV footage yet.
+
+### 7 classes (current)
+
+Test split of the 7-class data: 2,575 images from 45 videos never seen in training (968
+multirotor, 568 bird, 472 airplane, 525 helicopter boxes; 9.4 % background crops).
+
+| Model | Data | imgsz | mAP@0.5 | mAP@0.5:0.95 | multirotor AP50 | bird AP50 | airplane AP50 | helicopter AP50 | P / R multirotor @0.25 | P / R bird @0.25 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| yolo11s (`baseline7`, epoch 21) | Halmstad visible, 7 classes | 1280 | 0.847 | 0.415 | 0.881 | 0.753 | 0.888 | 0.866 | 0.75 / 0.91 | 0.67 / 0.69 |
+
+Video with tracking (ByteTrack, all 45 test videos at the full frame rate, IoU 0.5):
+
+| Model | drones P / R | drones MOTA / IDF1 | birds P / R | airplanes P / R | helicopters P / R | multirotor tracks on aircraft clips |
+|---|---|---|---|---|---|---|
+| `baseline7` | 0.89 / 0.91 | 0.77 / 0.83 | 0.89 / 0.69 | 0.63 / 0.74 | 0.94 / 0.91 | 0 |
+
+Write-up: [docs/experiments/2026-10-15_baseline7.md](docs/experiments/2026-10-15_baseline7.md).
+Reports: `runs/eval/baseline7_test/report.md`, `runs/infer/baseline7_test/video_eval/report.md`.
+
+- No airplane or helicopter is detected as multirotor anymore (0 of 997 boxes on single images,
+  no multirotor track on any aircraft clip). The remaining aircraft errors are confusions among
+  airplane, helicopter and bird: 52 airplanes are detected as helicopter, and 45 aircraft as bird.
+- On the 12 test videos that both models never trained on, `baseline7` beats the old baseline on
+  drones (MOTA 0.72 → 0.78, IDF1 0.85 → 0.87) and on bird recall (0.57 → 0.71).
+- The box size bias on drones shrinks a little (median area ratio 1.33 → 1.16 at 15–30 px), but the
+  mean IoU stays the same. Localization is still the main source of drone false positives.
+- Validation mAP peaked at epoch 21 and then declined. 25 epochs are enough for this data.
+- Some false bird tracks are lens dirt: specks that stay at the same pixel while the camera moves.
+
+### 5 classes (old baseline, old split)
+
+Test split of the 5-class data: 1,615 frames from 44 videos (916 multirotor and 518 bird boxes).
+Not comparable with the table above: only 12 test videos are shared, and the old model saw the
+other 33 videos of the new test split during training or validation.
+
+| Model | Data | imgsz | mAP@0.5 | mAP@0.5:0.95 | multirotor AP50 | bird AP50 | P / R multirotor @0.25 | P / R bird @0.25 |
+|---|---|---|---|---|---|---|---|---|
+| yolo11s (`baseline`, epoch 29) | Halmstad visible, 5 classes | 1280 | 0.777 | 0.347 | 0.802 | 0.751 | 0.52 / 0.87 | 0.81 / 0.73 |
+| same weights, NMS IoU 0.5 | | 1280 | 0.781 | 0.334 | 0.794 | 0.767 | 0.74 / 0.84 | 0.84 / 0.73 |
+
+mAP and AP values are Ultralytics'. P/R are measured at conf 0.25 and IoU ≥ 0.5. Write-ups:
+[baseline](docs/experiments/2026-10-11_baseline.md),
+[video tracking](docs/experiments/2026-10-11_video_tracking.md).
+
+- Most multirotor false positives were a second box or an offset box on a drone the model had
+  already found. With NMS IoU 0.5 instead of 0.7, multirotor precision at conf 0.25 rises from
+  0.52 to 0.74 (video inference uses 0.5).
+- On video, drones reached P/R 0.82 / 0.82, MOTA 0.64 and IDF1 0.79 at IoU 0.5, and 0.97 / 0.98 at
+  IoU 0.3: the boxes on tiny objects are too large (size bias).
+- Airplanes, then dropped as negatives, produced long false `multirotor` tracks on video.
+- Validation mAP peaked at epoch 29 of 100 (overfitting). Training took 6.1 h.
+- Higher resolution at inference only does not help: with `--imgsz 1920` drone MOTA drops from
+  0.64 to 0.54, with SAHI (320 px slices) to 0.45. Write-up:
+  [docs/experiments/2026-10-15_resolution_test.md](docs/experiments/2026-10-15_resolution_test.md).
 
 ## Classes
 
@@ -94,12 +226,13 @@ background); 6,098 multirotor, 3,652 bird, 3,121 airplane and 3,288 helicopter b
 python scripts/train.py --smoke                 # 1 epoch on 5 % of the data, checks the setup
 python scripts/train.py --name baseline7        # configs/train.yaml: yolo11s, imgsz 1280, 40 epochs
 python scripts/train.py --set epochs=50 model=yolo11m.pt --name m50   # any Ultralytics override
+python scripts/train.py --set model=configs/models/yolo11s-p2.yaml pretrained=yolo11s.pt \n    epochs=25 --name p2                          # extra stride-4 head for tiny objects
 python scripts/train.py --resume runs/detect/baseline   # continue an interrupted run
 ```
 
-On the RTX 4070 SUPER the baseline runs at ~40 images/s (batch 4–5 at `imgsz=1280`, the first
-epoch is slower while Windows starts the dataloader workers): ~3.5 min per epoch, ~6 h for 100
-epochs. Progress per epoch is in `runs/detect/<name>/results.csv`.
+On the RTX 4070 SUPER, training at `imgsz=1280` runs at ~37 images/s (autobatch picks 4; the first
+epoch is slower while Windows starts the dataloader workers). On the 7-class data that is ~5.3 min
+per epoch, ~3.6 h for 40 epochs. Progress per epoch is in `runs/detect/<name>/results.csv`.
 
 `train.py` wraps the Ultralytics trainer. It resolves all paths against the repo root, checks the
 split lists first, and keeps downloaded weights in `runs/weights/`. It uses project-local
@@ -191,19 +324,32 @@ comes from the training or validation split.
 ## Repository layout
 
 ```
-configs/        dataset.yaml, train.yaml
+configs/        dataset.yaml, train.yaml, showcase.yaml
+configs/sources/  per-dataset class mapping and options
+configs/models/   custom model definitions (yolo11-p2.yaml)
 data/           raw/, frames/, labeled/, splits/  (gitignored, never commit)
 sources/        sources.csv  (url, license, date_accessed, notes)
-configs/sources/  per-dataset class mapping and options
 scripts/        extract_frames.py, dedupe_frames.py, split_dataset.py,
                 convert_halmstad.py, visualize_labels.py, train.py, evaluate.py,
-                infer_video.py, evaluate_video.py
+                infer_video.py, evaluate_video.py, make_showcase.py
 src/fpvdd/      shared helpers (naming, labels, video, dedupe, split, sources,
                 matlab_gt, halmstad, draw, evaluation, inference, video_eval)
 docs/experiments/  one write-up per experiment (setup, results, analysis)
+docs/media/     README showcase GIF (the only committed media)
 notebooks/      error analysis (planned)
 tests/          pytest tests
 ```
+
+## Showcase video
+
+```bash
+python scripts/make_showcase.py --gif     # clips and texts in configs/showcase.yaml
+```
+
+Renders a 720p MP4 (`runs/showcase/showcase.mp4`) from existing `infer_video.py` output: boxes,
+track IDs and trails on the video, plus a side panel with a magnified view of the main track.
+No model runs, so it works on the CPU while the GPU trains. `--gif` also writes the README GIF
+(`docs/media/showcase.gif`).
 
 ## Checks
 
@@ -221,36 +367,16 @@ Details, decisions and open questions are in [ROADMAP.md](ROADMAP.md).
 3. ✅ Baseline training (`scripts/train.py`, yolo11s @ 1280)
 4. ✅ Evaluation: mAP@0.5 / 0.5:0.95, per-class P/R, confusion matrix, small/medium/large breakdown
 5. ✅ Video inference with ByteTrack/BoT-SORT and optional SAHI → annotated MP4 + detections JSON
-6. 🚧 Error analysis and iteration: video tracking metrics done (`evaluate_video.py`); error
-   analysis notebook, hard negatives, background share and image size next
+6. 🚧 Error analysis and iteration: video tracking metrics, 7 classes with background crops,
+   resolution test done; P2 detection head training; error analysis notebook next
 
-## Results
+## Citation
 
-Test split of Halmstad (1,615 frames from 44 videos never seen in training; 916 multirotor and
-518 bird boxes). Halmstad is a static ground camera filming against mostly sky backgrounds, so
-these numbers say little about FPV footage yet.
+If this project is useful for your work, please cite it (see [CITATION.cff](CITATION.cff)) and
+the Halmstad dataset: F. Svanström, F. Alonso-Fernandez, C. Englund, "A dataset for
+multi-sensor drone detection", *Data in Brief* 39 (2021), doi:10.1016/j.dib.2021.107521.
 
-| Model | Data | imgsz | mAP@0.5 | mAP@0.5:0.95 | multirotor AP50 | bird AP50 | P / R multirotor @0.25 | P / R bird @0.25 |
-|---|---|---|---|---|---|---|---|---|
-| yolo11s (`baseline`, epoch 29) | Halmstad visible | 1280 | 0.777 | 0.347 | 0.802 | 0.751 | 0.52 / 0.87 | 0.81 / 0.73 |
-| same weights, NMS IoU 0.5 | | 1280 | 0.781 | 0.334 | 0.794 | 0.767 | 0.74 / 0.84 | 0.84 / 0.73 |
+## License
 
-mAP and AP values are Ultralytics'. P/R are measured at conf 0.25 and IoU ≥ 0.5. Report:
-`runs/eval/baseline_test/report.md`. The full write-up (setup, training curve, FP analysis,
-problems hit during the run) is in [docs/experiments/2026-10-11_baseline.md](docs/experiments/2026-10-11_baseline.md).
-
-- Almost all objects are small (1,061 of 1,434 boxes < 32² px). Small objects score AP50 0.78,
-  medium ones 0.71.
-- multirotor ↔ bird confusion is rare: 3 birds were detected as multirotor, and no multirotor as
-  bird.
-- Most multirotor false positives are not phantom detections. In 709 of 723 cases the model drew a
-  second box on a drone it had already found, or a box that was offset on the tiny object. With
-  NMS IoU 0.5 instead of 0.7, multirotor precision at conf 0.25 rises from 0.52 to 0.74.
-- On video with tracking (ByteTrack, all 44 test videos at the full frame rate,
-  `evaluate_video.py`), drones reach P/R 0.82 / 0.82, MOTA 0.64 and IDF1 0.79 at IoU 0.5. At
-  IoU 0.3 they reach 0.97 / 0.98, MOTA 0.95 and IDF1 0.94. So the model finds the drones, but on
-  objects 20–35 px wide its boxes are often a few pixels off. Write-up:
-  [docs/experiments/2026-10-11_video_tracking.md](docs/experiments/2026-10-11_video_tracking.md).
-- Validation mAP peaked at epoch 29 (mAP50 0.894) and then declined while the training loss kept
-  falling. That is overfitting on a small domain, and `best.pt` keeps epoch 29. Training took
-  6.1 h for 100 epochs.
+Code: [AGPL-3.0](LICENSE), matching Ultralytics, on which it builds. The Halmstad dataset is
+CC0-1.0. The showcase GIF and video show frames from that dataset.

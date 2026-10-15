@@ -1,0 +1,35 @@
+# Showcase video for the README: scripts/make_showcase.py
+#
+# Detections come from infer_video.py output (no model runs here). All clips are from the test
+# split of baseline7, i.e. videos the model never saw during training.
+
+pred: runs/infer/baseline7_test
+raw: data/raw/halmstad
+output: runs/showcase/showcase.mp4
+gif: docs/media/showcase.gif
+
+title: fpv-drone-detect
+subtitle: Detecting and tracking small aerial objects in recorded video
+tagline: YOLO11s · ByteTrack · Halmstad drone dataset (CC0)
+model_line: YOLO11s · 7 classes · ByteTrack
+clip_note: Halmstad test split · not seen in training
+legend: [multirotor, bird, airplane, helicopter]
+
+segments:
+  - {video: V_DRONE_107, start: 30, frames: 150, caption: "Two drones, two stable track IDs"}
+  - {video: V_DRONE_029, start: 120, frames: 135, caption: "A drone ~27 px wide against clouds"}
+  - {video: V_BIRD_018, start: 0, frames: 135, caption: "Birds are a class of their own"}
+  - {video: V_HELICOPTER_041, start: 60, frames: 120, caption: "Helicopters are not drones"}
+  - {video: V_AIRPLANE_049, start: 90, frames: 120, caption: "Neither are airplanes"}
+
+end_lines:
+  - "45 held-out test videos · 7 classes"
+  - "test mAP@0.5  0.847"
+  - "drones on video  P 0.89 · R 0.91 · MOTA 0.77"
+footer: github.com/y0sHiiiiiiii/fpv-drone-detect
+
+# GIF for the README: a part of the MP4 (seconds), smaller and at a lower frame rate
+gif_start: 3.0
+gif_duration: 16.0
+gif_width: 720
+gif_fps: 10

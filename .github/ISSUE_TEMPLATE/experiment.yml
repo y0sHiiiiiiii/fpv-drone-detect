@@ -1,0 +1,22 @@
+name: Experiment or improvement
+description: Propose an experiment, a dataset or a pipeline improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project is limited to **offline analysis of recorded video**. Proposals involving
+        hardware, real-time or on-board deployment, control/guidance/targeting, identification of
+        specific military models or units, or geolocation are out of scope and will be closed.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should be tried or changed, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: measure
+    attributes:
+      label: How would we know it helped?
+      description: Which metric (e.g. drone MOTA, size bias, bird recall) should move, and how much?
